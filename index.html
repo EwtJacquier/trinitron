@@ -121,7 +121,8 @@
       };
 
       const audioConstraints = {
-        deviceId: audioSource ? { exact: audioSource } : undefined
+        deviceId: audioSource ? { exact: audioSource } : undefined,
+        noiseSuppression: false
       };
 
       try {
