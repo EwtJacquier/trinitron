@@ -122,6 +122,9 @@
 
       const audioConstraints = {
         deviceId: audioSource ? { exact: audioSource } : undefined,
+        autoGainControl: false,
+        echoCancellation: false,
+        googAutoGainControl: false,
         noiseSuppression: false
       };
 
