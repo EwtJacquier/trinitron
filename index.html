@@ -2,195 +2,152 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CRT Webcam Viewer</title>
+  <title>CRT Camera Viewer</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
+      overflow: hidden;
       background: black;
       color: white;
       font-family: sans-serif;
-      height: 100%;
-      overflow: hidden;
     }
-
-    #menu {
+    #settings {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: 20px;
+      left: 20px;
       background: rgba(0, 0, 0, 0.8);
-      padding: 15px;
-      border-radius: 8px;
+      padding: 20px;
+      border-radius: 10px;
       z-index: 10;
     }
-
-    select, button {
-      margin: 5px 0;
-      padding: 5px;
-      width: 100%;
-    }
-
-    canvas {
+    label, select, button {
       display: block;
-      width: 100vw;
-      height: 100vh;
+      margin: 10px 0;
     }
-
-    #fps {
+    canvas {
       position: absolute;
-      top: 10px;
-      right: 10px;
-      font-size: 14px;
-      background: rgba(0,0,0,0.5);
-      padding: 5px;
+      top: 0;
+      left: 0;
+    }
+    video, audio {
+      display: none;
     }
   </style>
 </head>
 <body>
+  <div id="settings">
+    <label for="videoSource">Select Camera:</label>
+    <select id="videoSource"></select>
 
-  <div id="menu">
-    <label>Camera:
-      <select id="cameraSelect"></select>
-    </label><br>
-    <label>Microphone:
-      <select id="micSelect"></select>
-    </label><br>
-    <button id="startBtn">Start</button>
+    <label for="audioSource">Select Microphone:</label>
+    <select id="audioSource"></select>
+
+    <button id="startButton">Confirm</button>
   </div>
 
-  <video id="video" autoplay playsinline muted style="display:none;"></video>
-  <audio id="audio" autoplay controls style="display:none;"></audio>
+  <video id="video" autoplay playsinline></video>
+  <audio id="audio" autoplay controls></audio>
   <canvas id="canvas"></canvas>
-  <div id="fps">FPS: 0</div>
 
   <script>
-    const cameraSelect = document.getElementById('cameraSelect');
-    const micSelect = document.getElementById('micSelect');
-    const startBtn = document.getElementById('startBtn');
-    const menu = document.getElementById('menu');
-    const video = document.getElementById('video');
-    const audio = document.getElementById('audio');
+    const videoElement = document.getElementById('video');
+    const audioElement = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const fpsDisplay = document.getElementById('fps');
+    const videoSelect = document.getElementById('videoSource');
+    const audioSelect = document.getElementById('audioSource');
+    const startButton = document.getElementById('startButton');
+    const settings = document.getElementById('settings');
 
-    let videoStream;
-    let audioStream;
-    let lastTime = performance.now();
-    let frames = 0;
-
-    async function requestPermissionsAndListDevices() {
-      try {
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        await listDevices();
-        tempStream.getTracks().forEach(t => t.stop());
-      } catch (err) {
-        alert("Permission denied or error accessing media: " + err.message);
-        console.error(err);
-      }
+    // Resize canvas to full screen
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
-    async function listDevices() {
+    // Get device list
+    async function getDevices() {
       const devices = await navigator.mediaDevices.enumerateDevices();
-
-      cameraSelect.innerHTML = '';
-      micSelect.innerHTML = '';
+      videoSelect.innerHTML = '';
+      audioSelect.innerHTML = '';
 
       devices.forEach(device => {
         const option = document.createElement('option');
         option.value = device.deviceId;
         option.text = device.label || `${device.kind}`;
-
         if (device.kind === 'videoinput') {
-          cameraSelect.appendChild(option);
+          videoSelect.appendChild(option);
         } else if (device.kind === 'audioinput') {
-          micSelect.appendChild(option);
+          audioSelect.appendChild(option);
         }
       });
     }
 
+    // Get stream based on selections
     async function startStream() {
-      const videoSource = cameraSelect.value;
-      const audioSource = micSelect.value;
+      const videoId = videoSelect.value;
+      const audioId = audioSelect.value;
 
-      const videoConstraints = {
-        deviceId: videoSource ? { exact: videoSource } : undefined,
-        frameRate: { ideal: 60, max: 60 },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      };
-
-      const audioConstraints = {
-        deviceId: audioSource ? { exact: audioSource } : undefined
+      const constraints = {
+        video: {
+          deviceId: videoId ? { exact: videoId } : undefined,
+          frameRate: { ideal: 60 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: {
+          deviceId: audioId ? { exact: audioId } : undefined
+        }
       };
 
       try {
-        if (videoStream) videoStream.getTracks().forEach(t => t.stop());
-        if (audioStream) audioStream.getTracks().forEach(t => t.stop());
-
-        videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
-        audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-
-        video.srcObject = videoStream;
-        audio.srcObject = audioStream;
-
-        video.onloadedmetadata = () => {
-          video.play();
-          menu.style.display = 'none';
-          startCRT();
-        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = stream;
+        audioElement.srcObject = stream;
+        settings.style.display = 'none'; // hide menu
+        renderLoop();
       } catch (err) {
-        alert("Error starting media: " + err.message);
+        alert('Error accessing devices: ' + err.message);
         console.error(err);
       }
     }
 
-    function startCRT() {
-      function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+    // Draw video with CRT effect
+    function renderLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+      // Apply CRT effect (scanlines + slight RGB shift)
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = imageData.data;
+
+      for (let y = 0; y < canvas.height; y++) {
+        if (y % 2 === 0) {
+          for (let x = 0; x < canvas.width; x++) {
+            let i = (y * canvas.width + x) * 4;
+            data[i] *= 0.9;     // Red
+            data[i + 1] *= 0.9; // Green
+            data[i + 2] *= 1.2; // Blue boost
+          }
+        }
       }
 
-      resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
+      ctx.putImageData(imageData, 0, 0);
 
-      function drawFrame() {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Test sem efeito para validar fps
-        // const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        // const data = imageData.data;
-        // for (let y = 0; y < canvas.height; y += 2) {
-        //   for (let x = 0; x < canvas.width; x++) {
-        //     const i = (y * canvas.width + x) * 4;
-        //     data[i] *= 0.9;
-        //     data[i + 1] *= 0.9;
-        //     data[i + 2] *= 0.9;
-        //   }
-        // }
-        // ctx.putImageData(imageData, 0, 0);
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        for (let y = 0; y < canvas.height; y += 2) {
-          ctx.fillRect(0, y, canvas.width, 1);
-        }
-
-        frames++;
-        const now = performance.now();
-        if (now - lastTime >= 1000) {
-          fpsDisplay.textContent = `FPS: ${frames}`;
-          frames = 0;
-          lastTime = now;
-        }
-
-        requestAnimationFrame(drawFrame);
-      }
-
-      requestAnimationFrame(drawFrame);
+      requestAnimationFrame(renderLoop);
     }
 
-    startBtn.addEventListener('click', startStream);
-    requestPermissionsAndListDevices();
+    // Populate devices list on load
+    navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+      .then(stream => {
+        stream.getTracks().forEach(track => track.stop());
+        return getDevices();
+      });
+
+    startButton.addEventListener('click', startStream);
   </script>
 </body>
 </html>
