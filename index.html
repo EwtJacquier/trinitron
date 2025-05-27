@@ -187,14 +187,13 @@
       }
     }
 
-    function applyCRTEffect(videoElement, ctx, x, y, width, height, lineIndex, lineHeight = 1) {
+    function applyCRTEffect(videoElement, ctx, x, y, drawWidth, drawHeight, lineIndex, lineHeight = 1) {
       const videoLineHeight = video.videoHeight;
       const scaleY = drawHeight / videoLineHeight;
 
       const canvasLineY = offsetY + lineIndex * scaleY;
       const canvasLineHeight = lineHeight * scaleY;
 
-      // Para getImageData, vamos arredondar:
       const y = Math.round(canvasLineY);
       const height = Math.max(1, Math.round(canvasLineHeight));
       
