@@ -149,7 +149,7 @@
       }
     }
 
-    function applyCRTEffect(ctx, x, y, width, height) {
+    function applyCRTEffect(videoElement, ctx, x, y, width, height) {
       const imageData = ctx.getImageData(x, y, width, height);
       const data = imageData.data;
 
@@ -238,7 +238,7 @@
 
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-        applyCRTEffect(ctx, offsetX, offsetY, drawWidth, drawHeight);
+        applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
 
         frames++;
         const now = performance.now();
