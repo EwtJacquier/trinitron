@@ -141,15 +141,7 @@
         video.onloadedmetadata = () => {
           video.play();
           menu.style.display = 'none';
-          renderLoop();
-
-          function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-          }
-
-          resizeCanvas();
-          window.addEventListener('resize', resizeCanvas);
+          startCRT();
         };
       } catch (err) {
         alert("Error starting media: " + err.message);
@@ -157,59 +149,62 @@
       }
     }
 
-    function renderLoop() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function applyCRTEffect(ctx, x, y, width, height) {
+      const imageData = ctx.getImageData(x, y, width, height);
+      const data = imageData.data;
 
-      const videoAspect = videoElement.videoWidth / videoElement.videoHeight;
-      const canvasAspect = canvas.width / canvas.height;
+      for (let row = 0; row < height; row++) {
+        const isScanline = row % 2 === 0;
 
-      let drawWidth, drawHeight, offsetX, offsetY;
+        for (let col = 0; col < width; col++) {
+          const i = (row * width + col) * 4;
 
-      if (canvasAspect > videoAspect) {
-        // canvas mais largo que o vídeo
-        drawHeight = canvas.height;
-        drawWidth = drawHeight * videoAspect;
-        offsetX = (canvas.width - drawWidth) / 2;
-        offsetY = 0;
-      } else {
-        // canvas mais alto que o vídeo
-        drawWidth = canvas.width;
-        drawHeight = drawWidth / videoAspect;
-        offsetX = 0;
-        offsetY = (canvas.height - drawHeight) / 2;
-      }
+          // Simula subpixels RGB deslocando ligeiramente
+          let r = data[i];
+          let g = data[i + 1];
+          let b = data[i + 2];
 
-      ctx.drawImage(videoElement, offsetX, offsetY, drawWidth, drawHeight);
-
-      // CRT effect: apply scanlines and light RGB tweak
-      let imageData = ctx.getImageData(offsetX, offsetY, drawWidth, drawHeight);
-      let data = imageData.data;
-
-      for (let y = 0; y < drawHeight; y++) {
-        if (y % 2 === 0) {
-          for (let x = 0; x < drawWidth; x++) {
-            let i = (y * drawWidth + x) * 4;
-            data[i] *= 0.9;     // Red
-            data[i + 1] *= 0.9; // Green
-            data[i + 2] *= 1.2; // Blue
+          // Pixel blend horizontal simples
+          if (col < width - 1) {
+            const ni = ((row * width) + (col + 1)) * 4;
+            r = (r + data[ni]) / 2;
+            g = (g + data[ni + 1]) / 2;
+            b = (b + data[ni + 2]) / 2;
           }
+
+          // Subpixel shift: leve aberração cromática
+          data[i]     = r * 1.1; // R: um pouco mais forte
+          data[i + 1] = g * 1.05; // G: suave
+          data[i + 2] = b * 0.95; // B: escurecido para "profundidade"
+
+          // Scanline darkening
+          if (isScanline) {
+            data[i]     *= 0.7;
+            data[i + 1] *= 0.7;
+            data[i + 2] *= 0.7;
+          }
+
+          // Brilho leve
+          const brightness = 1.03;
+          data[i]     = Math.min(255, data[i] * brightness);
+          data[i + 1] = Math.min(255, data[i + 1] * brightness);
+          data[i + 2] = Math.min(255, data[i + 2] * brightness);
         }
       }
 
-      ctx.putImageData(imageData, offsetX, offsetY);
+      ctx.putImageData(imageData, x, y);
 
-      frames++;
-      const now = performance.now();
-      if (now - lastTime >= 1000) {
-        fpsDisplay.textContent = `FPS: ${frames}`;
-        frames = 0;
-        lastTime = now;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+      for (let y = offsetY; y < offsetY + drawHeight; y += 2) {
+        ctx.fillRect(offsetX, y, drawWidth, 1);
       }
 
-      requestAnimationFrame(renderLoop);
+      ctx.save();
+      ctx.setTransform(1, 0.03, 0.03, 1, 0, 0); // leve distorção
+      ctx.drawImage(videoElement, offsetX, offsetY, drawWidth, drawHeight);
+      ctx.restore();  
     }
 
-    /*
     function startCRT() {
       function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -220,12 +215,30 @@
       window.addEventListener('resize', resizeCanvas);
 
       function drawFrame() {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        for (let y = 0; y < canvas.height; y += 2) {
-          ctx.fillRect(0, y, canvas.width, 1);
+        const videoAspect = videoElement.videoWidth / videoElement.videoHeight;
+        const canvasAspect = canvas.width / canvas.height;
+
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (canvasAspect > videoAspect) {
+          // canvas mais largo que o vídeo
+          drawHeight = canvas.height;
+          drawWidth = drawHeight * videoAspect;
+          offsetX = (canvas.width - drawWidth) / 2;
+          offsetY = 0;
+        } else {
+          // canvas mais alto que o vídeo
+          drawWidth = canvas.width;
+          drawHeight = drawWidth / videoAspect;
+          offsetX = 0;
+          offsetY = (canvas.height - drawHeight) / 2;
         }
+
+        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+
+        applyCRTEffect(ctx, offsetX, offsetY, drawWidth, drawHeight);
 
         frames++;
         const now = performance.now();
@@ -240,7 +253,6 @@
 
       requestAnimationFrame(drawFrame);
     }
-    */
 
     startBtn.addEventListener('click', startStream);
     requestPermissionsAndListDevices();
