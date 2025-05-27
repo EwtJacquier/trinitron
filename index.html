@@ -1,103 +1,120 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Webcam com Efeito CRT</title>
+  <title>CRT Webcam Viewer</title>
   <style>
-    body {
+    html, body {
+      margin: 0;
+      padding: 0;
       background: black;
       color: white;
       font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #menu {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 10;
+    }
+
+    #menu.hidden {
+      display: none;
     }
 
     select, button {
-      margin: 10px;
+      margin: 5px 0;
       padding: 5px;
-    }
-
-    .crt-container {
-      position: relative;
-      width: 640px;
-      height: 480px;
-      margin-top: 20px;
-    }
-
-    video {
       width: 100%;
-      height: 100%;
-      object-fit: cover;
-      filter: contrast(1.2) brightness(0.9);
     }
 
-    .crt-overlay {
+    #toggleMenu {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      background: 
-        repeating-linear-gradient(
-          to bottom,
-          rgba(0, 0, 0, 0.1),
-          rgba(0, 0, 0, 0.1) 2px,
-          transparent 2px,
-          transparent 4px
-        ),
-        radial-gradient(circle at center, rgba(255,255,255,0.02), rgba(0,0,0,0.3));
-      mix-blend-mode: overlay;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 11;
     }
 
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
   </style>
 </head>
 <body>
-  <h1>Selecionar Dispositivos</h1>
 
-  <label>Câmera:
-    <select id="cameraSelect"></select>
-  </label>
-  <label>Microfone:
-    <select id="micSelect"></select>
-  </label>
+  <button id="toggleMenu">Toggle Menu</button>
 
-  <button id="startBtn">Confirmar</button>
-
-  <div class="crt-container">
-    <video id="video" autoplay muted playsinline></video>
-    <div class="crt-overlay"></div>
+  <div id="menu">
+    <label>Camera:
+      <select id="cameraSelect"></select>
+    </label><br>
+    <label>Microphone:
+      <select id="micSelect"></select>
+    </label><br>
+    <button id="startBtn">Start</button>
   </div>
+
+  <video id="video" autoplay playsinline muted style="display:none;"></video>
+  <canvas id="canvas"></canvas>
 
   <script>
     const cameraSelect = document.getElementById('cameraSelect');
     const micSelect = document.getElementById('micSelect');
     const startBtn = document.getElementById('startBtn');
+    const toggleMenuBtn = document.getElementById('toggleMenu');
+    const menu = document.getElementById('menu');
     const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-    async function getDevicesComPermissao() {
+    let audioContext;
+    let stream;
+
+    toggleMenuBtn.onclick = () => {
+      menu.classList.toggle('hidden');
+    };
+
+    async function requestPermissionsAndListDevices() {
       try {
-        // Solicita permissão mínima para acessar os dispositivos
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-
-        const devices = await navigator.mediaDevices.enumerateDevices();
-
-        devices.forEach(device => {
-          const option = document.createElement('option');
-          option.value = device.deviceId;
-          option.text = device.label || `${device.kind}`;
-
-          if (device.kind === 'videoinput') {
-            cameraSelect.appendChild(option);
-          } else if (device.kind === 'audioinput') {
-            micSelect.appendChild(option);
-          }
-        });
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        await listDevices();
       } catch (err) {
-        alert("Permissão negada ou erro ao acessar dispositivos: " + err.message);
+        alert("Permission denied or error accessing media: " + err.message);
+        console.error(err);
       }
+    }
+
+    async function listDevices() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+
+      cameraSelect.innerHTML = '';
+      micSelect.innerHTML = '';
+
+      devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.text = device.label || `${device.kind}`;
+
+        if (device.kind === 'videoinput') {
+          cameraSelect.appendChild(option);
+        } else if (device.kind === 'audioinput') {
+          micSelect.appendChild(option);
+        }
+      });
     }
 
     async function startStream() {
@@ -105,21 +122,79 @@
       const audioSource = micSelect.value;
 
       const constraints = {
-        video: { deviceId: videoSource ? { exact: videoSource } : undefined },
-        audio: { deviceId: audioSource ? { exact: audioSource } : undefined }
+        video: {
+          deviceId: videoSource ? { exact: videoSource } : undefined,
+          frameRate: { ideal: 60 }
+        },
+        audio: {
+          deviceId: audioSource ? { exact: audioSource } : undefined
+        }
       };
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop());
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
+
+        handleAudio(stream);
+        startCRT();
       } catch (err) {
-        alert("Erro ao acessar mídia: " + err.message);
-        console.error(err);
+        alert("Error starting media: " + err.message);
       }
     }
 
+    function handleAudio(stream) {
+      audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const gain = audioContext.createGain();
+      gain.gain.value = 1;
+      source.connect(gain).connect(audioContext.destination);
+    }
+
+    function startCRT() {
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      function drawCRTFrame() {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Simulated CRT overlay
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let y = 0; y < canvas.height; y += 2) {
+          for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            data[i] *= 0.9;     // R
+            data[i + 1] *= 0.9; // G
+            data[i + 2] *= 0.9; // B
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // Slight scanline overlay (semi-transparent lines)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        for (let y = 0; y < canvas.height; y += 2) {
+          ctx.fillRect(0, y, canvas.width, 1);
+        }
+
+        requestAnimationFrame(drawCRTFrame);
+      }
+
+      requestAnimationFrame(drawCRTFrame);
+    }
+
     startBtn.addEventListener('click', startStream);
-    getDevicesComPermissao();
+    requestPermissionsAndListDevices();
   </script>
 </body>
 </html>
