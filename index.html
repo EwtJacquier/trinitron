@@ -24,27 +24,10 @@
       z-index: 10;
     }
 
-    #menu.hidden {
-      display: none;
-    }
-
     select, button {
       margin: 5px 0;
       padding: 5px;
       width: 100%;
-    }
-
-    #toggleMenu {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      color: white;
-      padding: 10px;
-      border-radius: 5px;
-      cursor: pointer;
-      z-index: 11;
     }
 
     canvas {
@@ -55,8 +38,6 @@
   </style>
 </head>
 <body>
-
-  <button id="toggleMenu">Toggle Menu</button>
 
   <div id="menu">
     <label>Camera:
@@ -69,24 +50,20 @@
   </div>
 
   <video id="video" autoplay playsinline muted style="display:none;"></video>
+  <audio id="audio" autoplay></audio>
   <canvas id="canvas"></canvas>
 
   <script>
     const cameraSelect = document.getElementById('cameraSelect');
     const micSelect = document.getElementById('micSelect');
     const startBtn = document.getElementById('startBtn');
-    const toggleMenuBtn = document.getElementById('toggleMenu');
     const menu = document.getElementById('menu');
     const video = document.getElementById('video');
+    const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
 
-    let audioContext;
     let stream;
-
-    toggleMenuBtn.onclick = () => {
-      menu.classList.toggle('hidden');
-    };
 
     async function requestPermissionsAndListDevices() {
       try {
@@ -138,20 +115,17 @@
 
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
+        audio.srcObject = stream;
 
-        handleAudio(stream);
-        startCRT();
+        video.onloadedmetadata = () => {
+          video.play();
+          menu.style.display = 'none'; // Hide menu after selection
+          startCRT();
+        };
       } catch (err) {
         alert("Error starting media: " + err.message);
+        console.error(err);
       }
-    }
-
-    function handleAudio(stream) {
-      audioContext = new AudioContext();
-      const source = audioContext.createMediaStreamSource(stream);
-      const gain = audioContext.createGain();
-      gain.gain.value = 1;
-      source.connect(gain).connect(audioContext.destination);
     }
 
     function startCRT() {
@@ -166,7 +140,6 @@
       function drawCRTFrame() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Simulated CRT overlay
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
 
@@ -181,7 +154,6 @@
 
         ctx.putImageData(imageData, 0, 0);
 
-        // Slight scanline overlay (semi-transparent lines)
         ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
         for (let y = 0; y < canvas.height; y += 2) {
           ctx.fillRect(0, y, canvas.width, 1);
