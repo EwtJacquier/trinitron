@@ -312,30 +312,10 @@
 
       function drawFrame() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        const videoAspect = video.videoWidth / video.videoHeight;
-        const canvasAspect = canvas.width / canvas.height;
-
-        let drawWidth, drawHeight, offsetX, offsetY;
-
-        if (canvasAspect > videoAspect) {
-          // canvas mais largo que o vídeo
-          drawHeight = canvas.height;
-          drawWidth = drawHeight * videoAspect;
-          offsetX = (canvas.width - drawWidth) / 2;
-          offsetY = 0;
-        } else {
-          // canvas mais alto que o vídeo
-          drawWidth = canvas.width;
-          drawHeight = drawWidth / videoAspect;
-          offsetX = 0;
-          offsetY = (canvas.height - drawHeight) / 2;
-        }
-
-        ctx.drawImage(video, offsetX, offsetY, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         //applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
-        applyPixelBlendEffect(ctx, offsetX, offsetY, canvas.width, canvas.height);
+        applyPixelBlendEffect(ctx, 0, 0, canvas.width, canvas.height);
         
         frames++;
         const now = performance.now();
