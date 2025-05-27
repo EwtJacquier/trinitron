@@ -154,8 +154,8 @@
       const videoConstraints = {
         deviceId: videoSource ? { exact: videoSource } : undefined,
         frameRate: { ideal: 60, max: 60 },
-        width: { ideal: 398 },
-        height: { ideal: 224 }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       };
 
       const audioConstraints = {
@@ -197,8 +197,26 @@
       window.addEventListener('resize', resizeCanvas);
 
       function drawFrame() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const videoAspect = video.videoWidth / video.videoHeight;
+        const canvasAspect = canvas.width / canvas.height;
+
+        let renderWidth, renderHeight, offsetX, offsetY;
+
+        if (videoAspect > canvasAspect) {
+          // Video is wider than canvas
+          renderWidth = canvas.width;
+          renderHeight = canvas.width / videoAspect;
+          offsetX = 0;
+          offsetY = (canvas.height - renderHeight) / 2;
+        } else {
+          // Video is taller than canvas
+          renderHeight = canvas.height;
+          renderWidth = canvas.height * videoAspect;
+          offsetX = (canvas.width - renderWidth) / 2;
+          offsetY = 0;
+        }
+
+        ctx.drawImage(video, offsetX, offsetY, renderWidth, renderHeight);
         
         frames++;
         const now = performance.now();
