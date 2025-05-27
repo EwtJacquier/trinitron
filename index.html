@@ -34,6 +34,7 @@
       display: block;
       width: 100vw;
       height: 100vh;
+      image-rendering: pixelated;
     }
 
     #container {
@@ -241,14 +242,73 @@
       }
     }
 
+    function applyPixelBlendEffect(ctx, x, y, width, height) {
+      const imageData = ctx.getImageData(x, y, width, height);
+      const src = imageData.data;
+
+      // Novo buffer triplo horizontal
+      const newWidth = width * 3;
+      const newImageData = ctx.createImageData(newWidth, height);
+      const dst = newImageData.data;
+
+      for (let row = 0; row < height; row++) {
+        for (let col = 0; col < width; col++) {
+          const i = (row * width + col) * 4;
+
+          // Pega cor atual
+          const r = src[i];
+          const g = src[i + 1];
+          const b = src[i + 2];
+          const a = src[i + 3];
+
+          // Cor anterior
+          const iPrev = (row * width + Math.max(0, col - 1)) * 4;
+          const rPrev = src[iPrev];
+          const gPrev = src[iPrev + 1];
+          const bPrev = src[iPrev + 2];
+
+          // Cor próxima
+          const iNext = (row * width + Math.min(width - 1, col + 1)) * 4;
+          const rNext = src[iNext];
+          const gNext = src[iNext + 1];
+          const bNext = src[iNext + 2];
+
+          // Subpixel 1 (esquerda): blend com anterior
+          const base1 = ((row * newWidth) + (col * 3)) * 4;
+          dst[base1]     = (r + rPrev) >> 1;
+          dst[base1 + 1] = (g + gPrev) >> 1;
+          dst[base1 + 2] = (b + bPrev) >> 1;
+          dst[base1 + 3] = a;
+
+          // Subpixel 2 (centro): cor original
+          const base2 = base1 + 4;
+          dst[base2]     = r;
+          dst[base2 + 1] = g;
+          dst[base2 + 2] = b;
+          dst[base2 + 3] = a;
+
+          // Subpixel 3 (direita): blend com próximo
+          const base3 = base2 + 4;
+          dst[base3]     = (r + rNext) >> 1;
+          dst[base3 + 1] = (g + gNext) >> 1;
+          dst[base3 + 2] = (b + bNext) >> 1;
+          dst[base3 + 3] = a;
+        }
+      }
+
+      // Redimensiona o canvas virtualmente (sem mudar o tamanho real do canvas)
+      ctx.clearRect(0, 0, width, height);
+      ctx.putImageData(newImageData, 0, 0);
+    }
+
     function startCRT() {
       function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        canvas.width = 398;
+        canvas.height = 224;
       }
 
       resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
+      //window.addEventListener('resize', resizeCanvas);
 
       function drawFrame() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -274,7 +334,8 @@
 
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-        applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
+        //applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
+        applyPixelBlendEffect(ctx, offsetX, offsetY, drawWidth, drawHeight);
         
         frames++;
         const now = performance.now();
