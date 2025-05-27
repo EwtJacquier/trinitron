@@ -116,7 +116,12 @@
     let audioStream;
     let lastTime = performance.now();
     let frames = 0;
-    let renderWidth, renderHeight, offsetX, offsetY;
+
+    // Aspect ratio helpers
+    let renderWidth = 0;
+    let renderHeight = 0;
+    let offsetX = 0;
+    let offsetY = 0;
 
     async function requestPermissionsAndListDevices() {
       try {
@@ -131,7 +136,6 @@
 
     async function listDevices() {
       const devices = await navigator.mediaDevices.enumerateDevices();
-
       cameraSelect.innerHTML = '';
       micSelect.innerHTML = '';
 
@@ -139,7 +143,6 @@
         const option = document.createElement('option');
         option.value = device.deviceId;
         option.text = device.label || `${device.kind}`;
-
         if (device.kind === 'videoinput') {
           cameraSelect.appendChild(option);
         } else if (device.kind === 'audioinput') {
@@ -155,8 +158,8 @@
       const videoConstraints = {
         deviceId: videoSource ? { exact: videoSource } : undefined,
         frameRate: { ideal: 60, max: 60 },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       };
 
       const audioConstraints = {
@@ -188,45 +191,60 @@
       }
     }
 
-    function startCRT() {
-      function updateRenderSize() {
-        const videoAspect = video.videoWidth / video.videoHeight;
-        const canvasAspect = canvas.width / canvas.height;
+    function updateRenderSize() {
+      const videoAspect = video.videoWidth / video.videoHeight;
+      const canvasAspect = canvas.width / canvas.height;
 
-        if (videoAspect > canvasAspect) {
-          renderWidth = canvas.width;
-          renderHeight = canvas.width / videoAspect;
-          offsetX = 0;
-          offsetY = (canvas.height - renderHeight) / 2;
-        } else {
-          renderHeight = canvas.height;
-          renderWidth = canvas.height * videoAspect;
-          offsetX = (canvas.width - renderWidth) / 2;
-          offsetY = 0;
-        }
+      if (videoAspect > canvasAspect) {
+        renderWidth = canvas.width;
+        renderHeight = canvas.width / videoAspect;
+        offsetX = 0;
+        offsetY = (canvas.height - renderHeight) / 2;
+      } else {
+        renderHeight = canvas.height;
+        renderWidth = canvas.height * videoAspect;
+        offsetX = (canvas.width - renderWidth) / 2;
+        offsetY = 0;
       }
+    }
 
+    function startCRT() {
       function resizeCanvas() {
+        // Optional: downscale to improve performance
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        // canvas.width = window.innerWidth / 2;
+        // canvas.height = window.innerHeight / 2;
         updateRenderSize();
       }
 
-      resizeCanvas();
+      video.addEventListener('loadedmetadata', updateRenderSize);
       window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
 
-      function drawFrame() {
+      // Optional: limit to 30 FPS (uncomment these lines)
+      let lastDrawTime = 0;
+      const targetFPS = 60;
+      const frameDuration = 1000 / targetFPS;
+
+      function drawFrame(now) {
+        // Uncomment for 30 FPS cap
+        if (now - lastDrawTime < frameDuration) {
+          requestAnimationFrame(drawFrame);
+          return;
+        }
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, offsetX, offsetY, renderWidth, renderHeight);
-        
+
         frames++;
-        const now = performance.now();
         if (now - lastTime >= 1000) {
           fpsDisplay.textContent = `FPS: ${frames}`;
           frames = 0;
           lastTime = now;
         }
 
+        lastDrawTime = now; // if using frame cap
         requestAnimationFrame(drawFrame);
       }
 
