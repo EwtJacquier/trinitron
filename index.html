@@ -153,8 +153,8 @@
       const videoConstraints = {
         deviceId: videoSource ? { exact: videoSource } : undefined,
         frameRate: { ideal: 60, max: 60 },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       };
 
       const audioConstraints = {
@@ -230,12 +230,11 @@
       }
 
       ctx.putImageData(imageData, x, y);
-      /*
+
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       for (let scanY = y; scanY < y + height; scanY += 2) {
         ctx.fillRect(x, scanY, width, 1);
       }
-        */
 
       /*
       ctx.save();
@@ -247,8 +246,8 @@
 
     function startCRT() {
       function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        canvas.width = 569;
+        canvas.height = 320;
       }
 
       resizeCanvas();
@@ -278,9 +277,7 @@
 
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-        if (frames % 3 === 0) {
-          applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
-        }
+        applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
         
         frames++;
         const now = performance.now();
