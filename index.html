@@ -230,11 +230,12 @@
       }
 
       ctx.putImageData(imageData, x, y);
-
+      /*
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       for (let scanY = y; scanY < y + height; scanY += 2) {
         ctx.fillRect(x, scanY, width, 1);
       }
+        */
 
       /*
       ctx.save();
@@ -277,10 +278,10 @@
 
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-        /*
-        applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
-        */
-
+        if (frameCount % 3 === 0) {
+          applyCRTEffect(ctx, offsetX, offsetY, drawWidth, drawHeight);
+        }
+        
         frames++;
         const now = performance.now();
         if (now - lastTime >= 1000) {
