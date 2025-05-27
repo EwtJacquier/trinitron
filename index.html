@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>CRT Webcam Viewer WebGL</title>
+  <title>CRT Webcam Viewer WebGL - Sem limitador de FPS</title>
   <style>
     html, body {
       margin: 0; padding: 0;
@@ -101,11 +101,8 @@
   let lastTime = performance.now();
   let frames = 0;
 
-  // Aspect ratio vars
-  let canvasWidth, canvasHeight;
   let videoAspect;
 
-  // Vertex shader source
   const vsSource = `
     attribute vec2 a_position;
     attribute vec2 a_texCoord;
@@ -117,7 +114,6 @@
     }
   `;
 
-  // Fragment shader source
   const fsSource = `
     precision mediump float;
     varying vec2 v_texCoord;
@@ -125,12 +121,10 @@
 
     void main() {
       vec4 color = texture2D(u_texture, v_texCoord);
-      // Optional: add CRT effect here if quiser depois
       gl_FragColor = color;
     }
   `;
 
-  // Helper to compile shader
   function createShader(gl, type, source) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
@@ -143,7 +137,6 @@
     return shader;
   }
 
-  // Helper to create program
   function createProgram(gl, vsSource, fsSource) {
     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
@@ -241,25 +234,18 @@
     program = createProgram(gl, vsSource, fsSource);
     gl.useProgram(program);
 
-    // Look up attribute locations
     const positionLocation = gl.getAttribLocation(program, "a_position");
     const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
 
-    // Create buffer for positions
     positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-
-    // We will update positions later to respect aspect ratio, but start with full quad:
-    // clipspace coords from -1 to 1 in X and Y
     setPositionFullScreen();
 
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Create buffer for texture coords
     texCoordBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    // texture coords go from (0,0) top-left to (1,1) bottom-right
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
       0, 0,
       1, 0,
@@ -272,11 +258,9 @@
     gl.enableVertexAttribArray(texCoordLocation);
     gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Create texture
     texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
-    // Set params so we can render any size video
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -284,7 +268,6 @@
 
     videoAspect = video.videoWidth / video.videoHeight;
 
-    // Resize canvas on window resize
     window.addEventListener('resize', () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -295,7 +278,6 @@
   }
 
   function setPositionFullScreen() {
-    // Full screen quad coords for clipspace -1..1 X and Y
     const fullScreenCoords = new Float32Array([
       -1,  1,
        1,  1,
@@ -315,11 +297,9 @@
     let drawWidth, drawHeight;
 
     if (canvasRatio > videoAspect) {
-      // Canvas mais largo que video: limitar pela altura
-      drawHeight = 2; // clipspace coords vão de -1 a 1 => 2 unidades
+      drawHeight = 2;
       drawWidth = 2 * videoAspect / canvasRatio;
     } else {
-      // Canvas mais alto que video: limitar pela largura
       drawWidth = 2;
       drawHeight = 2 * canvasRatio / videoAspect;
     }
@@ -342,18 +322,11 @@
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
   }
 
-  /*
-  let lastDrawTime = 0;
-  const targetFPS = 60;
-  const frameDuration = 1000 / targetFPS;
-  */
-
   function startRenderLoop() {
-    function render() {
+    function render(now) {
       if (video.readyState >= 2) { // HAVE_CURRENT_DATA
         gl.viewport(0, 0, canvas.width, canvas.height);
 
-        // Atualiza textura com frame do vídeo
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(
           gl.TEXTURE_2D,
@@ -370,10 +343,11 @@
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
         frames++;
-        if (now - lastTime >= 1000) {
+        const nowMs = performance.now();
+        if (nowMs - lastTime >= 1000) {
           fpsDisplay.textContent = `FPS: ${frames}`;
           frames = 0;
-          lastTime = now;
+          lastTime = nowMs;
         }
       }
 
