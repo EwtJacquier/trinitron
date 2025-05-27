@@ -195,13 +195,13 @@
       ctx.putImageData(imageData, x, y);
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-      for (let y = offsetY; y < offsetY + drawHeight; y += 2) {
-        ctx.fillRect(offsetX, y, drawWidth, 1);
+      for (let ofy = offsetY; ofy < y + drawHeight; ofy += 2) {
+        ctx.fillRect(x, ofy, drawWidth, 1);
       }
 
       ctx.save();
       ctx.setTransform(1, 0.03, 0.03, 1, 0, 0); // leve distorção
-      ctx.drawImage(videoElement, offsetX, offsetY, drawWidth, drawHeight);
+      ctx.drawImage(videoElement, x, y, drawWidth, drawHeight);
       ctx.restore();  
     }
 
