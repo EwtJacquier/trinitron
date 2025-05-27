@@ -197,7 +197,7 @@
       const y = Math.round(canvasLineY);
       const height = Math.max(1, Math.round(canvasLineHeight));
       
-      const imageData = ctx.getImageData(x, y, drawWidth, height);
+      const imageData = ctx.getImageData(offsetX, y, drawWidth, height);
       const data = imageData.data;
 
       for (let row = 0; row < height; row++) {
