@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Webcam com Efeito CRT</title>
+  <style>
+    body {
+      background: black;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    select, button {
+      margin: 10px;
+      padding: 5px;
+    }
+
+    .crt-container {
+      position: relative;
+      width: 640px;
+      height: 480px;
+      margin-top: 20px;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: contrast(1.2) brightness(0.9);
+    }
+
+    .crt-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: 
+        repeating-linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.1),
+          rgba(0, 0, 0, 0.1) 2px,
+          transparent 2px,
+          transparent 4px
+        ),
+        radial-gradient(circle at center, rgba(255,255,255,0.02), rgba(0,0,0,0.3));
+      mix-blend-mode: overlay;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>Selecionar Dispositivos</h1>
+
+  <label>Câmera:
+    <select id="cameraSelect"></select>
+  </label>
+  <label>Microfone:
+    <select id="micSelect"></select>
+  </label>
+
+  <button id="startBtn">Confirmar</button>
+
+  <div class="crt-container">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="crt-overlay"></div>
+  </div>
+
+  <script>
+    const cameraSelect = document.getElementById('cameraSelect');
+    const micSelect = document.getElementById('micSelect');
+    const startBtn = document.getElementById('startBtn');
+    const video = document.getElementById('video');
+
+    async function getDevicesComPermissao() {
+      try {
+        // Solicita permissão mínima para acessar os dispositivos
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+
+        devices.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.text = device.label || `${device.kind}`;
+
+          if (device.kind === 'videoinput') {
+            cameraSelect.appendChild(option);
+          } else if (device.kind === 'audioinput') {
+            micSelect.appendChild(option);
+          }
+        });
+      } catch (err) {
+        alert("Permissão negada ou erro ao acessar dispositivos: " + err.message);
+      }
+    }
+
+    async function startStream() {
+      const videoSource = cameraSelect.value;
+      const audioSource = micSelect.value;
+
+      const constraints = {
+        video: { deviceId: videoSource ? { exact: videoSource } : undefined },
+        audio: { deviceId: audioSource ? { exact: audioSource } : undefined }
+      };
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+      } catch (err) {
+        alert("Erro ao acessar mídia: " + err.message);
+        console.error(err);
+      }
+    }
+
+    startBtn.addEventListener('click', startStream);
+    getDevicesComPermissao();
+  </script>
+</body>
+</html>
