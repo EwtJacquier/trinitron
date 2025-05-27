@@ -108,6 +108,10 @@
     const video = document.getElementById('video');
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = internalWidth;
+    offscreenCanvas.height = internalHeight;
+    const offscreenCtx = offscreenCanvas.getContext('2d');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const fpsDisplay = document.getElementById('fps');
 
@@ -115,6 +119,9 @@
     let audioStream;
     let lastTime = performance.now();
     let frames = 0;
+
+    const internalWidth = 256;
+    const internalHeight = 224;
 
     async function requestPermissionsAndListDevices() {
       try {
@@ -307,9 +314,16 @@
       window.addEventListener('resize', resizeCanvas);
 
       function drawFrame() {
+        // Desenha o vídeo no canvas interno
+        offscreenCtx.drawImage(video, 0, 0, internalWidth, internalHeight);
+
+        // Aplica o efeito CRT no canvas interno
+        applyCRTEffect(video, offscreenCtx, 0, 0, internalWidth, internalHeight);
+
+        // Limpa o canvas principal
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const videoAspect = video.videoWidth / video.videoHeight;
+        const videoAspect = internalWidth / internalHeight;
         const canvasAspect = canvas.width / canvas.height;
 
         let drawWidth, drawHeight, offsetX, offsetY;
@@ -328,7 +342,10 @@
           offsetY = (canvas.height - drawHeight) / 2;
         }
 
-        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+        // Desenha o canvas interno já com efeito no canvas principal, escalando
+        ctx.imageSmoothingEnabled = false; // importante pra manter pixel art nítida
+        ctx.drawImage(offscreenCanvas, 0, 0, internalWidth, internalHeight, offsetX, offsetY, drawWidth, drawHeight);
+
 
         applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
         
