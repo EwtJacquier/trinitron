@@ -35,6 +35,15 @@
       width: 100vw;
       height: 100vh;
     }
+
+    #fps {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 14px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px;
+    }
   </style>
 </head>
 <body>
@@ -50,8 +59,9 @@
   </div>
 
   <video id="video" autoplay playsinline muted style="display:none;"></video>
-  <audio id="audio" autoplay></audio>
+  <audio id="audio" autoplay controls style="display:none;"></audio>
   <canvas id="canvas"></canvas>
+  <div id="fps">FPS: 0</div>
 
   <script>
     const cameraSelect = document.getElementById('cameraSelect');
@@ -62,13 +72,18 @@
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const fpsDisplay = document.getElementById('fps');
 
-    let stream;
+    let videoStream;
+    let audioStream;
+    let lastTime = performance.now();
+    let frames = 0;
 
     async function requestPermissionsAndListDevices() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         await listDevices();
+        tempStream.getTracks().forEach(t => t.stop());
       } catch (err) {
         alert("Permission denied or error accessing media: " + err.message);
         console.error(err);
@@ -98,28 +113,30 @@
       const videoSource = cameraSelect.value;
       const audioSource = micSelect.value;
 
-      const constraints = {
-        video: {
-          deviceId: videoSource ? { exact: videoSource } : undefined,
-          frameRate: { ideal: 60 }
-        },
-        audio: {
-          deviceId: audioSource ? { exact: audioSource } : undefined
-        }
+      const videoConstraints = {
+        deviceId: videoSource ? { exact: videoSource } : undefined,
+        frameRate: { ideal: 60, max: 60 },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      };
+
+      const audioConstraints = {
+        deviceId: audioSource ? { exact: audioSource } : undefined
       };
 
       try {
-        if (stream) {
-          stream.getTracks().forEach(t => t.stop());
-        }
+        if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+        if (audioStream) audioStream.getTracks().forEach(t => t.stop());
 
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-        audio.srcObject = stream;
+        videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+
+        video.srcObject = videoStream;
+        audio.srcObject = audioStream;
 
         video.onloadedmetadata = () => {
           video.play();
-          menu.style.display = 'none'; // Hide menu after selection
+          menu.style.display = 'none';
           startCRT();
         };
       } catch (err) {
@@ -137,32 +154,39 @@
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
 
-      function drawCRTFrame() {
+      function drawFrame() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-
-        for (let y = 0; y < canvas.height; y += 2) {
-          for (let x = 0; x < canvas.width; x++) {
-            const i = (y * canvas.width + x) * 4;
-            data[i] *= 0.9;     // R
-            data[i + 1] *= 0.9; // G
-            data[i + 2] *= 0.9; // B
-          }
-        }
-
-        ctx.putImageData(imageData, 0, 0);
+        // Test sem efeito para validar fps
+        // const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // const data = imageData.data;
+        // for (let y = 0; y < canvas.height; y += 2) {
+        //   for (let x = 0; x < canvas.width; x++) {
+        //     const i = (y * canvas.width + x) * 4;
+        //     data[i] *= 0.9;
+        //     data[i + 1] *= 0.9;
+        //     data[i + 2] *= 0.9;
+        //   }
+        // }
+        // ctx.putImageData(imageData, 0, 0);
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
         for (let y = 0; y < canvas.height; y += 2) {
           ctx.fillRect(0, y, canvas.width, 1);
         }
 
-        requestAnimationFrame(drawCRTFrame);
+        frames++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+          fpsDisplay.textContent = `FPS: ${frames}`;
+          frames = 0;
+          lastTime = now;
+        }
+
+        requestAnimationFrame(drawFrame);
       }
 
-      requestAnimationFrame(drawCRTFrame);
+      requestAnimationFrame(drawFrame);
     }
 
     startBtn.addEventListener('click', startStream);
