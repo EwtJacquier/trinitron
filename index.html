@@ -30,7 +30,7 @@
       width: 100%;
     }
 
-    #canvasDisplay {
+    canvas {
       display: block;
       width: 100vw;
       height: 100vh;
@@ -96,8 +96,7 @@
   <video id="video" autoplay playsinline muted style="display:none;"></video>
   <audio id="audio" autoplay controls style="display:none;"></audio>
   <div id="container">
-    <canvas id="canvas" width="398" height="224" style="display:none;"></canvas>
-    <canvas id="canvasDisplay" width="1194" height="224"></canvas>
+    <canvas id="canvas" width="1920" height="1080"></canvas>
     <div id="crt-overlay"></div>
   </div>
   <div id="fps">FPS: 0</div>
@@ -110,9 +109,7 @@
     const video = document.getElementById('video');
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
-    const canvasDisplay = document.getElementById('canvasDisplay');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const ctxDisplay = canvasDisplay.getContext('2d');
     const fpsDisplay = document.getElementById('fps');
 
     let videoStream;
@@ -190,131 +187,18 @@
       }
     }
 
-    function applyCRTEffect(videoElement, ctx, x, y, width, height) {
-      const imageData = ctx.getImageData(x, y, width, height);
-      const data = imageData.data;
-
-      const brightness = 1.03;
-      const hasNextCol = width - 1;
-
-      for (let row = 0; row < height; row++) {
-        const base = row * width * 4;
-        const isScanline = (row & 1) === 0; // bitwise mod 2
-
-        for (let col = 0; col < width; col++) {
-          const i = base + col * 4;
-
-          // Carrega valores RGB
-          let r = data[i];
-          let g = data[i + 1];
-          let b = data[i + 2];
-
-          // Blend horizontal
-          if (col < hasNextCol) {
-            const ni = i + 4;
-            r = (r + data[ni]) >> 1;
-            g = (g + data[ni + 1]) >> 1;
-            b = (b + data[ni + 2]) >> 1;
-          }
-
-          // Aberração cromática (leve)
-          r *= 1.1;
-          g *= 1.05;
-          b *= 0.95;
-
-          // Scanline (escurece linhas pares)
-          if (isScanline) {
-            r *= 0.7;
-            g *= 0.7;
-            b *= 0.7;
-          }
-
-          // Brilho
-          data[i]     = r * brightness > 255 ? 255 : r * brightness;
-          data[i + 1] = g * brightness > 255 ? 255 : g * brightness;
-          data[i + 2] = b * brightness > 255 ? 255 : b * brightness;
-        }
-      }
-
-      ctx.putImageData(imageData, x, y);
-
-      // Scanlines visuais extras (opcional, mas leve agora)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-      for (let scanY = y; scanY < y + height; scanY += 2) {
-        ctx.fillRect(x, scanY, width, 1);
-      }
-    }
-
-    function applyPixelBlendEffect(ctx, x, y, width, height) {
-      const imageData = ctx.getImageData(x, y, width, height);
-      const src = imageData.data;
-
-      // Novo buffer triplo horizontal
-      const newWidth = width * 3;
-      const newImageData = ctx.createImageData(newWidth, height);
-      const dst = newImageData.data;
-
-      for (let row = 0; row < height; row++) {
-        for (let col = 0; col < width; col++) {
-          const i = (row * width + col) * 4;
-
-          // Pega cor atual
-          const r = src[i];
-          const g = src[i + 1];
-          const b = src[i + 2];
-          const a = src[i + 3];
-
-          // Cor anterior
-          const iPrev = (row * width + Math.max(0, col - 1)) * 4;
-          const rPrev = src[iPrev];
-          const gPrev = src[iPrev + 1];
-          const bPrev = src[iPrev + 2];
-
-          // Cor próxima
-          const iNext = (row * width + Math.min(width - 1, col + 1)) * 4;
-          const rNext = src[iNext];
-          const gNext = src[iNext + 1];
-          const bNext = src[iNext + 2];
-
-          // Subpixel 1 (esquerda): blend com anterior
-          const base1 = ((row * newWidth) + (col * 3)) * 4;
-          dst[base1]     = (r + rPrev) >> 1;
-          dst[base1 + 1] = (g + gPrev) >> 1;
-          dst[base1 + 2] = (b + bPrev) >> 1;
-          dst[base1 + 3] = a;
-
-          // Subpixel 2 (centro): cor original
-          const base2 = base1 + 4;
-          dst[base2]     = r;
-          dst[base2 + 1] = g;
-          dst[base2 + 2] = b;
-          dst[base2 + 3] = a;
-
-          // Subpixel 3 (direita): blend com próximo
-          const base3 = base2 + 4;
-          dst[base3]     = (r + rNext) >> 1;
-          dst[base3 + 1] = (g + gNext) >> 1;
-          dst[base3 + 2] = (b + bNext) >> 1;
-          dst[base3 + 3] = a;
-        }
-      }
-
-      // Redimensiona o canvas virtualmente (sem mudar o tamanho real do canvas)
-      ctx.clearRect(0, 0, width, height);
-      ctx.putImageData(newImageData, 0, 0);
-    }
-
     function startCRT() {
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
       function drawFrame() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        //applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
-        applyPixelBlendEffect(ctx, 0, 0, canvas.width, canvas.height);
-
-        // Escala o canvas interno para o externo (triplo na largura)
-        ctxDisplay.clearRect(0, 0, ctxDisplay.width, ctxDisplay.height);
-        ctxDisplay.drawImage(canvas, 0, 0, ctxDisplay.width, ctxDisplay.height);
         
         frames++;
         const now = performance.now();
