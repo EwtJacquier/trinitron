@@ -108,12 +108,6 @@
     const video = document.getElementById('video');
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
-    const internalWidth = 256;
-    const internalHeight = 224;
-    const offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = internalWidth;
-    offscreenCanvas.height = internalHeight;
-    const offscreenCtx = offscreenCanvas.getContext('2d');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const fpsDisplay = document.getElementById('fps');
 
@@ -196,112 +190,56 @@
       const imageData = ctx.getImageData(x, y, width, height);
       const data = imageData.data;
 
-      // Criar um buffer para guardar os canais originais
-      const original = new Uint8ClampedArray(data);
+      const brightness = 1.03;
+      const hasNextCol = width - 1;
 
       for (let row = 0; row < height; row++) {
-        for (let col = 0; col < width; col++) {
-          const i = (row * width + col) * 4;
-
-          // RGB originais do pixel atual
-          const r = original[i];
-          const g = original[i + 1];
-          const b = original[i + 2];
-          const a = original[i + 3];
-
-          // Canal verde fica no pixel atual
-          data[i + 1] = g;
-
-          // Canal vermelho desloca para pixel à esquerda (se existir)
-          if (col > 0) {
-            const leftI = (row * width + (col - 1)) * 4;
-            data[leftI] = r;
-          } else {
-            // No primeiro pixel, manter vermelho original
-            data[i] = r;
-          }
-
-          // Canal azul desloca para pixel à direita (se existir)
-          if (col < width - 1) {
-            const rightI = (row * width + (col + 1)) * 4;
-            data[rightI + 2] = b;
-          } else {
-            // No último pixel, manter azul original
-            data[i + 2] = b;
-          }
-
-          // Alpha permanece o mesmo no pixel atual
-          data[i + 3] = a;
-        }
-      }
-
-      // Opcional: scanlines (linhas escuras)
-      for (let row = 0; row < height; row++) {
-        if (row % 2 === 0) {
-          for (let col = 0; col < width; col++) {
-            const i = (row * width + col) * 4;
-            data[i]     = data[i] * 0.7;
-            data[i + 1] = data[i + 1] * 0.7;
-            data[i + 2] = data[i + 2] * 0.7;
-          }
-        }
-      }
-
-      ctx.putImageData(imageData, x, y);
-    }
-
-    /*
-    function applyCRTEffect(videoElement, ctx, x, y, width, height) {
-      const imageData = ctx.getImageData(x, y, width, height);
-      const data = imageData.data;
-
-      for (let row = 0; row < height; row++) {
-        const isScanline = row % 2 === 0;
+        const base = row * width * 4;
+        const isScanline = (row & 1) === 0; // bitwise mod 2
 
         for (let col = 0; col < width; col++) {
-          const i = (row * width + col) * 4;
+          const i = base + col * 4;
 
-          // Simula subpixels RGB deslocando ligeiramente
+          // Carrega valores RGB
           let r = data[i];
           let g = data[i + 1];
           let b = data[i + 2];
 
-          // Pixel blend horizontal simples
-          if (col < width - 1) {
-            const ni = ((row * width) + (col + 1)) * 4;
-            r = (r + data[ni]) / 2;
-            g = (g + data[ni + 1]) / 2;
-            b = (b + data[ni + 2]) / 2;
+          // Blend horizontal
+          if (col < hasNextCol) {
+            const ni = i + 4;
+            r = (r + data[ni]) >> 1;
+            g = (g + data[ni + 1]) >> 1;
+            b = (b + data[ni + 2]) >> 1;
           }
 
-          // Subpixel shift: leve aberração cromática
-          data[i]     = r * 1.1; // R: um pouco mais forte
-          data[i + 1] = g * 1.05; // G: suave
-          data[i + 2] = b * 0.95; // B: escurecido para "profundidade"
+          // Aberração cromática (leve)
+          r *= 1.1;
+          g *= 1.05;
+          b *= 0.95;
 
-          // Scanline darkening
+          // Scanline (escurece linhas pares)
           if (isScanline) {
-            data[i]     *= 0.7;
-            data[i + 1] *= 0.7;
-            data[i + 2] *= 0.7;
+            r *= 0.7;
+            g *= 0.7;
+            b *= 0.7;
           }
 
-          // Brilho leve
-          const brightness = 1.03;
-          data[i]     = Math.min(255, data[i] * brightness);
-          data[i + 1] = Math.min(255, data[i + 1] * brightness);
-          data[i + 2] = Math.min(255, data[i + 2] * brightness);
+          // Brilho
+          data[i]     = r * brightness > 255 ? 255 : r * brightness;
+          data[i + 1] = g * brightness > 255 ? 255 : g * brightness;
+          data[i + 2] = b * brightness > 255 ? 255 : b * brightness;
         }
       }
 
       ctx.putImageData(imageData, x, y);
 
+      // Scanlines visuais extras (opcional, mas leve agora)
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       for (let scanY = y; scanY < y + height; scanY += 2) {
         ctx.fillRect(x, scanY, width, 1);
       }
     }
-      */
 
     function startCRT() {
       function resizeCanvas() {
@@ -313,16 +251,9 @@
       window.addEventListener('resize', resizeCanvas);
 
       function drawFrame() {
-        // Desenha o vídeo no canvas interno
-        offscreenCtx.drawImage(video, 0, 0, internalWidth, internalHeight);
-
-        // Aplica o efeito CRT no canvas interno
-        applyCRTEffect(video, offscreenCtx, 0, 0, internalWidth, internalHeight);
-
-        // Limpa o canvas principal
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const videoAspect = internalWidth / internalHeight;
+        const videoAspect = video.videoWidth / video.videoHeight;
         const canvasAspect = canvas.width / canvas.height;
 
         let drawWidth, drawHeight, offsetX, offsetY;
@@ -341,10 +272,7 @@
           offsetY = (canvas.height - drawHeight) / 2;
         }
 
-        // Desenha o canvas interno já com efeito no canvas principal, escalando
-        ctx.imageSmoothingEnabled = false; // importante pra manter pixel art nítida
-        ctx.drawImage(offscreenCanvas, 0, 0, internalWidth, internalHeight, offsetX, offsetY, drawWidth, drawHeight);
-
+        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
         applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
         
