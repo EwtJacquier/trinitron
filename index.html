@@ -108,6 +108,8 @@
     const video = document.getElementById('video');
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('canvas');
+    const internalWidth = 256;
+    const internalHeight = 224;
     const offscreenCanvas = document.createElement('canvas');
     offscreenCanvas.width = internalWidth;
     offscreenCanvas.height = internalHeight;
@@ -119,9 +121,6 @@
     let audioStream;
     let lastTime = performance.now();
     let frames = 0;
-
-    const internalWidth = 256;
-    const internalHeight = 224;
 
     async function requestPermissionsAndListDevices() {
       try {
