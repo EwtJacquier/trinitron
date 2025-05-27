@@ -154,8 +154,8 @@
       const videoConstraints = {
         deviceId: videoSource ? { exact: videoSource } : undefined,
         frameRate: { ideal: 60, max: 60 },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 398 },
+        height: { ideal: 224 }
       };
 
       const audioConstraints = {
@@ -332,10 +332,10 @@
           offsetY = (canvas.height - drawHeight) / 2;
         }
 
-        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+        ctx.drawImage(video, offsetX, offsetY, canvas.width, canvas.height);
 
         //applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
-        applyPixelBlendEffect(ctx, offsetX, offsetY, drawWidth, drawHeight);
+        applyPixelBlendEffect(ctx, offsetX, offsetY, canvas.width, canvas.height);
         
         frames++;
         const now = performance.now();
