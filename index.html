@@ -279,7 +279,7 @@
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
         if (frames % 3 === 0) {
-          applyCRTEffect(ctx, offsetX, offsetY, drawWidth, drawHeight);
+          applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight);
         }
         
         frames++;
