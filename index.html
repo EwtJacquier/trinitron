@@ -284,19 +284,17 @@
         //ctx.clearRect(offsetX, offsetY + currentLine, drawWidth, 1);
 
         // Desenha apenas a linha 'currentLine' do vídeo na canvas
-        /*
         ctx.drawImage(
           video,
-          0, currentLine, video.videoWidth, 1, // fonte: uma linha do vídeo
+          0, currentLine, video.videoWidth, 10, // fonte: uma linha do vídeo
           offsetX, offsetY + currentLine * (drawHeight / video.videoHeight), drawWidth, drawHeight / video.videoHeight // destino: linha no canvas
         );
-        */
 
-        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+        //ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-        applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight, currentLine, 1);
+        applyCRTEffect(video, ctx, offsetX, offsetY, drawWidth, drawHeight, currentLine, 10);
 
-        currentLine++;
+        currentLine+= 10;
         if (currentLine >= video.videoHeight) {
           currentLine = 0;
         }
