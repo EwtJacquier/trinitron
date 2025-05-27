@@ -141,7 +141,15 @@
         video.onloadedmetadata = () => {
           video.play();
           menu.style.display = 'none';
-          startCRT();
+          renderLoop();
+
+          function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+          }
+
+          resizeCanvas();
+          window.addEventListener('resize', resizeCanvas);
         };
       } catch (err) {
         alert("Error starting media: " + err.message);
@@ -149,6 +157,59 @@
       }
     }
 
+    function renderLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const videoAspect = videoElement.videoWidth / videoElement.videoHeight;
+      const canvasAspect = canvas.width / canvas.height;
+
+      let drawWidth, drawHeight, offsetX, offsetY;
+
+      if (canvasAspect > videoAspect) {
+        // canvas mais largo que o vídeo
+        drawHeight = canvas.height;
+        drawWidth = drawHeight * videoAspect;
+        offsetX = (canvas.width - drawWidth) / 2;
+        offsetY = 0;
+      } else {
+        // canvas mais alto que o vídeo
+        drawWidth = canvas.width;
+        drawHeight = drawWidth / videoAspect;
+        offsetX = 0;
+        offsetY = (canvas.height - drawHeight) / 2;
+      }
+
+      ctx.drawImage(videoElement, offsetX, offsetY, drawWidth, drawHeight);
+
+      // CRT effect: apply scanlines and light RGB tweak
+      let imageData = ctx.getImageData(offsetX, offsetY, drawWidth, drawHeight);
+      let data = imageData.data;
+
+      for (let y = 0; y < drawHeight; y++) {
+        if (y % 2 === 0) {
+          for (let x = 0; x < drawWidth; x++) {
+            let i = (y * drawWidth + x) * 4;
+            data[i] *= 0.9;     // Red
+            data[i + 1] *= 0.9; // Green
+            data[i + 2] *= 1.2; // Blue
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, offsetX, offsetY);
+
+      frames++;
+      const now = performance.now();
+      if (now - lastTime >= 1000) {
+        fpsDisplay.textContent = `FPS: ${frames}`;
+        frames = 0;
+        lastTime = now;
+      }
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    /*
     function startCRT() {
       function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -179,6 +240,7 @@
 
       requestAnimationFrame(drawFrame);
     }
+    */
 
     startBtn.addEventListener('click', startStream);
     requestPermissionsAndListDevices();
