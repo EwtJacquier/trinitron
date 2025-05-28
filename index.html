@@ -13,7 +13,7 @@
     }
     #canvas {
       filter: saturate(1.3) brightness(1.04);
-      position: fixed;
+      position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
@@ -50,6 +50,16 @@
 
     #container.ps {
       aspect-ratio: 640 / 480;
+    }
+
+    #container.snes #canvas {
+      width: 120%;
+      height: 100%;
+    }
+
+    #container.ps #canvas {
+      width: 120%;
+      height: 100%;
     }
 
     #crt-overlay {
