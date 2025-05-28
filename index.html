@@ -363,7 +363,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    videoAspect = 1920 / 1080;
+    videoAspect = video.videoWidth / video.videoHeight;
 
     gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
@@ -392,34 +392,15 @@
   function updatePositionsForAspectRatio() {
     if (!gl) return;
 
-    const canvasRatio = canvas.width / canvas.height;
-
-    let drawWidth, drawHeight;
-
-    if (canvasRatio > videoAspect) {
-      drawHeight = 2;
-      drawWidth = 2 * videoAspect / canvasRatio;
-    } else {
-      drawWidth = 2;
-      drawHeight = 2 * canvasRatio / videoAspect;
-    }
-
-    const x1 = -drawWidth / 2;
-    const x2 = drawWidth / 2;
-    const y1 = drawHeight / 2;
-    const y2 = -drawHeight / 2;
-
-    const positions = new Float32Array([
-      x1, y1,
-      x2, y1,
-      x1, y2,
-      x1, y2,
-      x2, y1,
-      x2, y2,
-    ]);
-
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+      1, -1,
+      -1,  1,
+      -1,  1,
+      1, -1,
+      1,  1,
+    ]), gl.STATIC_DRAW);
   }
 
   function startRenderLoop() {
