@@ -40,6 +40,8 @@
       z-index: 2;
       border-radius: 50px;
       overflow: hidden;
+      position: absolute;
+      max-height: 85vw;
     }
 
     #container.snes {
@@ -300,11 +302,6 @@
     videoAspect = video.videoWidth / video.videoHeight;
 
     window.addEventListener('resize', () => {
-      canvas.width = Math.floor(window.innerWidth);
-      canvas.height = Math.floor(window.innerHeight);
-      canvas.style.width = window.innerWidth + 'px';
-      canvas.style.height = window.innerHeight + 'px';
-
       updatePositionsForAspectRatio();
     });
 
