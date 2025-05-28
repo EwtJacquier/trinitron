@@ -287,8 +287,8 @@
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
       frameRate: { ideal: 60, max: 60 },
-      width: { exact: 1920 },
-      height: { exact: 1080 }
+      width: { exact: 640 },
+      height: { exact: 360 }
     };
 
     const audioConstraints = {
@@ -363,7 +363,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    videoAspect = video.videoWidth / video.videoHeight;
+    videoAspect = 1920 / 1080;
 
     gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
