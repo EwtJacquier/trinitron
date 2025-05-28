@@ -427,36 +427,24 @@
     offCanvas.width = 640;
     offCanvas.height = 360;
     const ctx = offCanvas.getContext('2d');
-
+    
     function render(now) {
       if (video.readyState >= 2) { // HAVE_CURRENT_DATA
         gl.viewport(0, 0, canvas.width, canvas.height);
 
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
-        ctx.clearRect(0, 0, 640, 360);
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
 
-        // Cálculo de aspecto preservado
-        const videoAspect = video.videoWidth / video.videoHeight;
-        const targetAspect = 640 / 360;
+        const canvasWidth = 640;
+        const canvasHeight = 360;
 
-        let drawWidth = 640;
-        let drawHeight = 360;
-
-        if (videoAspect > targetAspect) {
-          // Vídeo é mais largo que o destino → cortar laterais
-          drawHeight = 360;
-          drawWidth = 360 * videoAspect;
-        } else {
-          // Vídeo é mais alto que o destino → cortar topo/baixo
-          drawWidth = 640;
-          drawHeight = 640 / videoAspect;
-        }
-
-        const dx = (640 - drawWidth) / 2;
-        const dy = (360 - drawHeight) / 2;
-
-        ctx.drawImage(video, dx, dy, drawWidth, drawHeight);
+        ctx.drawImage(
+          video,             // vídeo fonte
+          0, 0, 1920, 1080,  // área completa do vídeo
+          0, 0, 640, 480     // área do canvas a desenhar (com escala)
+        );
 
         gl.texImage2D(
           gl.TEXTURE_2D,
