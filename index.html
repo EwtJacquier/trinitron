@@ -214,9 +214,9 @@
   async function startStream() {
     const videoSource = cameraSelect.value;
     const audioSource = micSelect.value;
-    const aspect = aspect.value;
+    const ratio = aspect.value;
 
-    container.classList.add(aspect);
+    container.classList.add(ratio);
 
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
