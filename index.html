@@ -46,33 +46,42 @@
       max-height: 85vw;
     }
 
-    #container.snes {
+    #container.snesanalogue {
       aspect-ratio: 260 / 240;
     }
 
-    #container.ps {
-      aspect-ratio: 260 / 240;
-    }
-
-    #container.ps2 {
-      aspect-ratio: 260 / 240;
-    }
-
-    #container.snes #canvas {
+    #container.snesanalogue #canvas {
       width: 178%;
       height: 107%;
     }
 
-    #container.ps #canvas {
+    #container.ps1retroscaler2x {
+      aspect-ratio: 260 / 240;
+    }
+
+    #container.ps1retroscaler2x #canvas {
       width: 120%;
       height: 100%;
       margin-left: 0.3%;
     }
 
-    #container.ps2 #canvas {
+    #container.ps2retroscaler2x {
+      aspect-ratio: 260 / 240;
+    }
+
+    #container.ps2retroscaler2x #canvas {
       width: 113%;
       height: 107%;
       margin-left: -0.2%;
+    }
+
+    #container.n64retroscaler2x {
+      aspect-ratio: 260 / 240;
+    }
+
+    #container.n64retroscaler2x #canvas {
+      width: 104%;
+      height: 107%;
     }
 
     #crt-overlay {
@@ -119,9 +128,10 @@
   </label><br>
   <label>Aspect Ratio:
     <select id="ratio">
-      <option value="snes">Super Nintendo (Analogue NT)</option>
-      <option value="ps">PS1 (Retro Scaler 2x)</option>
-      <option value="ps2">PS2 (Retro Scaler 2x)</option>
+      <option value="snesanalogue">Super Nintendo (Analogue NT)</option>
+      <option value="n64retroscaler2x">Nintendo 64 (Retro Scaler 2x)</option>
+      <option value="ps1retroscaler2x">PS1 (Retro Scaler 2x)</option>
+      <option value="ps2retroscaler2x">PS2 (Retro Scaler 2x)</option>
     </select>
   </label><br>
   <button id="startBtn">Start</button>
