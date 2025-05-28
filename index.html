@@ -20,11 +20,13 @@
     }
     #menu {
       position: absolute;
-      top: 10px; left: 10px;
+      top: 50%; 
+      left: 50%;
       background: rgba(0,0,0,0.8);
       padding: 15px;
       border-radius: 8px;
       z-index: 10;
+      transform: translate(-50%, -50%);
     }
     select, button {
       margin: 5px 0;
@@ -49,7 +51,7 @@
     }
 
     #container.ps {
-      aspect-ratio: 640 / 480;
+      aspect-ratio: 260 / 240;
     }
 
     #container.snes #canvas {
@@ -60,6 +62,7 @@
     #container.ps #canvas {
       width: 120%;
       height: 100%;
+      margin-left: 0.3%;
     }
 
     #crt-overlay {
