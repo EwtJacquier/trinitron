@@ -54,6 +54,10 @@
       aspect-ratio: 260 / 240;
     }
 
+    #container.ps2 {
+      aspect-ratio: 260 / 240;
+    }
+
     #container.snes #canvas {
       width: 178%;
       height: 107%;
@@ -63,6 +67,12 @@
       width: 120%;
       height: 100%;
       margin-left: 0.3%;
+    }
+
+    #container.ps2 #canvas {
+      width: 113%;
+      height: 107%;
+      margin-left: -0.2%;
     }
 
     #crt-overlay {
@@ -109,8 +119,9 @@
   </label><br>
   <label>Aspect Ratio:
     <select id="ratio">
-      <option value="snes">Super Nintendo</option>
-      <option value="ps">PS1 / N64</option>
+      <option value="snes">Super Nintendo (Analogue NT)</option>
+      <option value="ps">PS1 (Retro Scaler 2x)</option>
+      <option value="ps2">PS2 (Retro Scaler 2x)</option>
     </select>
   </label><br>
   <button id="startBtn">Start</button>
