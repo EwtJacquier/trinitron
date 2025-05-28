@@ -228,8 +228,8 @@
   }
 
   function initWebGL() {
-    canvas.width = Math.floor(window.innerWidth / 2);
-    canvas.height = Math.floor(window.innerHeight / 2);
+    canvas.width = Math.floor(window.innerWidth);
+    canvas.height = Math.floor(window.innerHeight);
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
 
@@ -277,8 +277,8 @@
     videoAspect = video.videoWidth / video.videoHeight;
 
     window.addEventListener('resize', () => {
-      canvas.width = Math.floor(window.innerWidth / 2);
-      canvas.height = Math.floor(window.innerHeight / 2);
+      canvas.width = Math.floor(window.innerWidth);
+      canvas.height = Math.floor(window.innerHeight);
       canvas.style.width = window.innerWidth + 'px';
       canvas.style.height = window.innerHeight + 'px';
 
