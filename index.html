@@ -140,7 +140,7 @@
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas" width="1920" height="1080"></canvas>
+  <canvas id="canvas" width="3840" height="2160"></canvas>
   <div id="crt-overlay"></div>
 </div>
 <div id="fps">FPS: 0</div>
@@ -365,7 +365,7 @@
 
     videoAspect = video.videoWidth / video.videoHeight;
 
-    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
+    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 1280, 720);
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
@@ -405,8 +405,8 @@
 
   function startRenderLoop() {
     const offCanvas = document.createElement('canvas');
-    offCanvas.width = 640;
-    offCanvas.height = 360;
+    offCanvas.width = 1280;
+    offCanvas.height = 720;
     const ctx = offCanvas.getContext('2d');
     
     function render(now) {
@@ -418,13 +418,10 @@
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
 
-        const canvasWidth = 640;
-        const canvasHeight = 360;
-
         ctx.drawImage(
           video,             // vídeo fonte
-          0, 0, 1920, 1080,  // área completa do vídeo
-          0, 0, 640, 360     // área do canvas a desenhar (com escala)
+          0, 0, 3840, 2160,  // área completa do vídeo
+          0, 0, 1280, 720     // área do canvas a desenhar (com escala)
         );
 
         gl.texImage2D(
