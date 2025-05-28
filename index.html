@@ -423,13 +423,8 @@
   }
 
   function startRenderLoop() {
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = 640;
-    offCanvas.height = 360;
-    const ctx = offCanvas.getContext('2d');
-
-    function render() {
-      if (video.readyState >= 2) {
+    function render(now) {
+      if (video.readyState >= 2) { // HAVE_CURRENT_DATA
         gl.viewport(0, 0, canvas.width, canvas.height);
 
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -449,12 +444,29 @@
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        frames++;
+        const nowMs = performance.now();
+        if (nowMs - lastTime >= 1000) {
+          fpsDisplay.textContent = `FPS: ${frames}`;
+          frames = 0;
+          lastTime = nowMs;
+        }
       }
+
       requestAnimationFrame(render);
     }
+
     requestAnimationFrame(render);
   }
 
+  frames++;
+        const nowMs = performance.now();
+        if (nowMs - lastTime >= 1000) {
+          fpsDisplay.textContent = `FPS: ${frames}`;
+          frames = 0;
+          lastTime = nowMs;
+        }
 
   startBtn.onclick = () => {
     startStream();
