@@ -365,10 +365,7 @@
 
     videoAspect = video.videoWidth / video.videoHeight;
 
-    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 1920, 1080);
-
-    canvas.width = 1920;
-    canvas.height = 1080;
+    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
@@ -392,32 +389,16 @@
   function updatePositionsForAspectRatio() {
     if (!gl) return;
 
-    const canvasRatio = canvas.width / canvas.height;
-
-    let drawWidth, drawHeight;
-
-    if (canvasRatio > videoAspect) {
-      drawHeight = 2;
-      drawWidth = 2 * videoAspect / canvasRatio;
-    } else {
-      drawWidth = 2;
-      drawHeight = 2 * canvasRatio / videoAspect;
-    }
-
-    const x1 = -drawWidth / 2;
-    const x2 = drawWidth / 2;
-    const y1 = drawHeight / 2;
-    const y2 = -drawHeight / 2;
-
+    // Atualizar os buffers de posição e coordenadas de textura
+    // para cobrir todo o canvas
     const positions = new Float32Array([
-      x1, y1,
-      x2, y1,
-      x1, y2,
-      x1, y2,
-      x2, y1,
-      x2, y2,
+      -1,  1,
+      1,  1,
+      -1, -1,
+      -1, -1,
+      1,  1,
+      1, -1,
     ]);
-
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
   }
