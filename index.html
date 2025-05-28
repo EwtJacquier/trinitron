@@ -287,8 +287,8 @@
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
       frameRate: { ideal: 60, max: 60 },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
+      width: { exact: 640 },
+      height: { exact: 360 }
     };
 
     const audioConstraints = {
@@ -378,21 +378,15 @@
   }
 
   function setPositionFullScreen() {
-    const scale = 1 / 3;
-    const x1 = -scale;
-    const x2 = scale;
-    const y1 = -scale;
-    const y2 = scale;
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      x1, y1,
-      x2, y1,
-      x1, y2,
-      x1, y2,
-      x2, y1,
-      x2, y2,
-    ]), gl.STATIC_DRAW);
+    const fullScreenCoords = new Float32Array([
+      -1,  1,
+       1,  1,
+      -1, -1,
+      -1, -1,
+       1,  1,
+       1, -1,
+    ]);
+    gl.bufferData(gl.ARRAY_BUFFER, fullScreenCoords, gl.STATIC_DRAW);
   }
 
   function updatePositionsForAspectRatio() {
