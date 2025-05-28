@@ -228,8 +228,14 @@
   }
 
   function initWebGL() {
-    canvas.width = Math.floor(window.innerWidth / 3);
-    canvas.height = Math.floor(window.innerHeight / 3);
+    const fixedHeight = 480;  // altura interna fixa
+    videoAspect = video.videoWidth / video.videoHeight;
+    const fixedWidth = Math.floor(fixedHeight * videoAspect);
+
+    canvas.width = fixedWidth;
+    canvas.height = fixedHeight;
+
+    // Estica o canvas visualmente para preencher toda a tela
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
 
@@ -277,8 +283,10 @@
     videoAspect = video.videoWidth / video.videoHeight;
 
     window.addEventListener('resize', () => {
-      canvas.width = Math.floor(window.innerWidth / 3);
-      canvas.height = Math.floor(window.innerHeight / 3);
+      // Mantém a resolução interna fixa mesmo no resize
+      canvas.width = fixedWidth;
+      canvas.height = fixedHeight;
+
       canvas.style.width = window.innerWidth + 'px';
       canvas.style.height = window.innerHeight + 'px';
 
