@@ -287,8 +287,8 @@
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
       frameRate: { ideal: 60, max: 60 },
-      width: { exact: 3840 },
-      height: { ideal: 2160 }
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
     };
 
     const audioConstraints = {
@@ -365,7 +365,7 @@
 
     videoAspect = video.videoWidth / video.videoHeight;
 
-    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 1280, 720);
+    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
@@ -420,7 +420,7 @@
 
         ctx.drawImage(
           video,             // vídeo fonte
-          0, 0, 3840, 2160,  // área completa do vídeo
+          0, 0, 1920, 1080,  // área completa do vídeo
           0, 0, 1280, 720     // área do canvas a desenhar (com escala)
         );
 
