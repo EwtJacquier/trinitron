@@ -13,7 +13,6 @@
     }
     #canvas {
       filter: saturate(1.3) brightness(1.04);
-      width: 100vw; height: 100vh;
     }
     #menu {
       position: absolute;
@@ -107,9 +106,6 @@
   let texture;
   let lastTime = performance.now();
   let frames = 0;
-
-  const desiredWidth = 720;  
-  const desiredHeight = 480;
 
   let videoAspect;
 
@@ -232,8 +228,10 @@
   }
 
   function initWebGL() {
-    canvas.width = desiredWidth;
-    canvas.height = desiredHeight;
+    canvas.width = Math.floor(window.innerWidth / 3);
+    canvas.height = Math.floor(window.innerHeight / 3);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
 
     gl = canvas.getContext('webgl');
     if (!gl) {
@@ -279,12 +277,11 @@
     videoAspect = video.videoWidth / video.videoHeight;
 
     window.addEventListener('resize', () => {
-      canvas.width = desiredWidth;
-      canvas.height = desiredHeight;
+      canvas.width = Math.floor(window.innerWidth / 3);
+      canvas.height = Math.floor(window.innerHeight / 3);
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
 
-      // Atualiza viewport do WebGL para corresponder ao tamanho interno
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      
       updatePositionsForAspectRatio();
     });
 
