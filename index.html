@@ -107,7 +107,9 @@
   let texture;
   let lastTime = performance.now();
   let frames = 0;
-  let resolutionScale = 0.3; 
+
+  const desiredWidth = 720;  
+  const desiredHeight = 480;
 
   let videoAspect;
 
@@ -230,8 +232,8 @@
   }
 
   function initWebGL() {
-    canvas.width = window.innerWidth * resolutionScale;
-    canvas.height = window.innerHeight * resolutionScale;
+    canvas.width = desiredWidth;
+    canvas.height = desiredHeight;
 
     gl = canvas.getContext('webgl');
     if (!gl) {
@@ -277,8 +279,12 @@
     videoAspect = video.videoWidth / video.videoHeight;
 
     window.addEventListener('resize', () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = desiredWidth;
+      canvas.height = desiredHeight;
+
+      // Atualiza viewport do WebGL para corresponder ao tamanho interno
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      
       updatePositionsForAspectRatio();
     });
 
