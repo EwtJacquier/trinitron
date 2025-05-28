@@ -287,8 +287,8 @@
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
       frameRate: { ideal: 60, max: 60 },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
+      width: { exact: 3840 },
+      height: { ideal: 2160 }
     };
 
     const audioConstraints = {
