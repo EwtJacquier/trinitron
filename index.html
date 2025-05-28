@@ -183,7 +183,7 @@
       vec2 cellSize = 1.0 / u_textureSize;
 
       // Mapeia o pixel atual de volta ao centro do pixel original
-      vec2 pos = v_texCoord * u_textureSize;
+      vec2 pos = v_texCoord * (u_textureSize * 3.0);
       vec2 cellIndex = floor(pos / 3.0);
       vec2 localPos = mod(pos, 3.0);
 
@@ -455,14 +455,6 @@
 
     requestAnimationFrame(render);
   }
-
-  frames++;
-        const nowMs = performance.now();
-        if (nowMs - lastTime >= 1000) {
-          fpsDisplay.textContent = `FPS: ${frames}`;
-          frames = 0;
-          lastTime = nowMs;
-        }
 
   startBtn.onclick = () => {
     startStream();
