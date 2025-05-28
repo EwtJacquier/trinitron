@@ -140,7 +140,6 @@
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas2" width="640" height="360"></canvas>
   <canvas id="canvas" width="1920" height="1080"></canvas>
   <div id="crt-overlay"></div>
 </div>
@@ -366,7 +365,10 @@
 
     videoAspect = video.videoWidth / video.videoHeight;
 
-    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
+    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 1920, 1080);
+
+    canvas.width = 1920;
+    canvas.height = 1080;
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
@@ -421,7 +423,7 @@
   }
 
   function startRenderLoop() {
-    const offCanvas = document.getElementById('canvas2');
+    const offCanvas = document.createElement('canvas');
     offCanvas.width = 640;
     offCanvas.height = 360;
     const ctx = offCanvas.getContext('2d');
