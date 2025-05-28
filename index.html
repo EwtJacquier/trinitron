@@ -423,6 +423,11 @@
   }
 
   function startRenderLoop() {
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = 640;
+    offCanvas.height = 360;
+    const ctx = offCanvas.getContext('2d');
+    
     function render(now) {
       if (video.readyState >= 2) { // HAVE_CURRENT_DATA
         gl.viewport(0, 0, canvas.width, canvas.height);
