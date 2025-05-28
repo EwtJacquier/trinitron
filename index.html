@@ -13,6 +13,10 @@
     }
     #canvas {
       filter: saturate(1.3) brightness(1.04);
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
     }
     #menu {
       position: absolute;
@@ -28,29 +32,42 @@
       width: 100%;
     }
     #container {
-      position: relative;
-      width: 100vw; height: 100vh;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: auto;
+      height: 95%;
+      z-index: 2;
+      border-radius: 50px;
       overflow: hidden;
     }
+
+    #container.snes {
+      aspect-ratio: 260 / 240;
+    }
+
+    #container.ps {
+      aspect-ratio: 640 / 480;
+    }
+
     #crt-overlay {
       background: url(/crt.png) no-repeat center center;
       background-size: 100% 150%;
       position: absolute;
       inset: 0;
       pointer-events: none;
-      border-radius: 5%;
+      border-radius: 50px;
       box-shadow: inset 0 0 80px rgb(175 63 63 / 28%);
       mix-blend-mode: normal;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: auto;
+      width: 100%;
       height: 100%;
       z-index: 2;
       animation: flicker 0.15s infinite alternate;
-      aspect-ratio: 260/240;
-      max-height: 56vw;
     }
+
     @keyframes flicker {
       0%   { opacity: 0.5; }
       100% { opacity: 0.48; }
@@ -75,13 +92,19 @@
   <label>Microphone:
     <select id="micSelect"></select>
   </label><br>
+  <label>Aspect Ratio:
+    <select id="ratio">
+      <option value="snes">Super Nintendo</option>
+      <option value="ps">PS1 / N64</option>
+    </select>
+  </label><br>
   <button id="startBtn">Start</button>
 </div>
 
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas"></canvas>
+  <canvas id="canvas" width="1920" height="1080"></canvas>
   <div id="crt-overlay"></div>
 </div>
 <div id="fps">FPS: 0</div>
@@ -89,7 +112,9 @@
 <script>
   const cameraSelect = document.getElementById('cameraSelect');
   const micSelect = document.getElementById('micSelect');
+  const aspect = document.getElementById('aspect');
   const startBtn = document.getElementById('startBtn');
+  const container = document.getElementById('container');
   const menu = document.getElementById('menu');
   const video = document.getElementById('video');
   const audio = document.getElementById('audio');
@@ -189,6 +214,9 @@
   async function startStream() {
     const videoSource = cameraSelect.value;
     const audioSource = micSelect.value;
+    const aspect = aspect.value;
+
+    container.classList.add(aspect);
 
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
@@ -228,11 +256,6 @@
   }
 
   function initWebGL() {
-    canvas.width = Math.floor(window.innerWidth);
-    canvas.height = Math.floor(window.innerHeight);
-    canvas.style.width = window.innerWidth + 'px';
-    canvas.style.height = window.innerHeight + 'px';
-
     gl = canvas.getContext('webgl');
     if (!gl) {
       alert('WebGL not supported');
