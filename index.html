@@ -135,8 +135,9 @@
   </label><br>
   <label>Filter:
     <select id="filter">
+      <option value="original">Original</option>
       <option value="crt">CRT</option>
-      <option value="sharpen">Sharpen</option>
+      <option value="sharpen">Sharpen3D</option>
     </select>
   </label><br>
   <button id="startBtn">Start</button>
@@ -177,6 +178,31 @@
   let videoAspect;
 
   const filters = {
+    original: `precision mediump float;
+
+      varying vec2 v_texCoord;
+      uniform sampler2D u_texture;
+      uniform vec2 u_textureSize;
+
+      void main() {
+        // Tamanho do bloco de 3x3 em coordenadas de textura
+        vec2 cellSize = 1.0 / u_textureSize;
+        
+        // Multiplica por 3 para "ampliar" cada pixel
+        vec2 pos = v_texCoord * (u_textureSize * 3.0);
+        
+        // Descobre o índice do pixel original
+        vec2 cellIndex = floor(pos / 3.0);
+
+        // Converte o índice de volta para coordenadas da textura
+        vec2 baseCoord = (cellIndex + 0.5) * cellSize;
+
+        // Obtém a cor do pixel original
+        vec4 color = texture2D(u_texture, baseCoord);
+
+        gl_FragColor = color;
+      }
+    `,
     crt: `precision mediump float;
 
     varying vec2 v_texCoord;
