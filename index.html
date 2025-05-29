@@ -249,7 +249,7 @@
   };
 
   // Fragment shader (GLSL) - fsSource
-  let fsSource = filters[ filter ];
+  let fsSource = null; 
 
   // Vertex shader - vsSource
   const vsSource = `
@@ -277,6 +277,7 @@
   }
 
   function createProgram(gl, vsSource, fsSource) {
+    fsSource = filters[ filter.value ];
     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
     const program = gl.createProgram();
