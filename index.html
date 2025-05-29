@@ -84,6 +84,7 @@
     }
 
     #crt-overlay {
+      display: none;
       background: url(/crt.png) no-repeat center center;
       background-size: 183.3% 200%;
       position: absolute;
@@ -351,7 +352,11 @@
     const ratio = aspect.value;
 
     container.classList.add(ratio);
-
+    
+    if ( filter.value === 'crt' ) {
+      overlay.style.display = 'block';
+    }
+    
     const videoConstraints = {
       deviceId: videoSource ? { exact: videoSource } : undefined,
       frameRate: { ideal: 60, max: 60 },
