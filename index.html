@@ -228,13 +228,13 @@
       vec4 bottom = cellIndex.y < u_textureSize.y - 1.0 ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize) : center;
 
       vec4 horiz;
-      if (localPos.x < 1.0) horiz = mix(left, center, (localPos.x + 1.0) * 0.8);
-      else if (localPos.x > 1.0) horiz = mix(center, right, (localPos.x - 1.0) * 0.8);
+      if (localPos.x < 1.0) horiz = mix(left, center, (localPos.x + 1.0) * 0.9);
+      else if (localPos.x > 1.0) horiz = mix(center, right, (localPos.x - 1.0) * 0.9);
       else horiz = center;
 
       vec4 finalColor;
-      if (localPos.y < 1.0) finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.8);
-      else if (localPos.y > 1.0) finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.8);
+      if (localPos.y < 1.0) finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.9);
+      else if (localPos.y > 1.0) finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.9);
       else finalColor = horiz;
 
       gl_FragColor = finalColor;
