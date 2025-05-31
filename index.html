@@ -16,6 +16,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
+      image-rendering: pixelated;
     }
     #menu {
       position: absolute;
@@ -147,7 +148,7 @@
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas" width="3840" height="2160"></canvas>
+  <canvas id="canvas" width="960" height="720"></canvas>
   <div id="crt-overlay"></div>
 </div>
 <div id="fps">FPS: 0</div>
@@ -181,29 +182,52 @@
   const filters = {
     original: `precision mediump float;
 
-      varying vec2 v_texCoord;
-      uniform sampler2D u_texture;
-      uniform vec2 u_textureSize;
+    varying vec2 v_texCoord;
+    uniform sampler2D u_texture;
+    uniform vec2 u_textureSize;   // (1920, 1080)
+    uniform vec2 u_cropSize;      // (1440, 1080)
+    uniform float u_blockSize;    // 4.5
+    uniform vec2 u_outputSize;    // tamanho do canvas de saída (ex: 960, 720)
 
-      void main() {
-        // Tamanho do bloco de 3x3 em coordenadas de textura
-        vec2 cellSize = 1.0 / u_textureSize;
-        
-        // Multiplica por 3 para "ampliar" cada pixel
-        vec2 pos = v_texCoord * (u_textureSize * 3.0);
-        
-        // Descobre o índice do pixel original
-        vec2 cellIndex = floor(pos / 3.0);
+    void main() {
+        // Coordenada do fragmento na tela de saída, em pixels
+        // Transformar v_texCoord (0..1) para pixels da saída
+        vec2 fragCoord = v_texCoord * u_outputSize;
 
-        // Converte o índice de volta para coordenadas da textura
-        vec2 baseCoord = (cellIndex + 0.5) * cellSize;
+        // Quantidade de blocos na horizontal e vertical na imagem recortada
+        vec2 blocksCount = vec2(
+            floor(u_cropSize.x / u_blockSize),
+            floor(u_cropSize.y / u_blockSize)
+        );
 
-        // Obtém a cor do pixel original
-        vec4 color = texture2D(u_texture, baseCoord);
+        // Cada bloco será expandido para 3x3 pixels, então a saída tem blocksCount * 3 pixels
+        // Então, fragCoord indica qual pixel da saída, precisamos saber qual bloco ele pertence:
+        vec2 blockIndex = floor(fragCoord / 3.0);
+
+        // Evitar ultrapassar os blocos
+        if (blockIndex.x >= blocksCount.x || blockIndex.y >= blocksCount.y) {
+            gl_FragColor = vec4(0.0); // transparente/preto fora da área
+            return;
+        }
+
+        // Centro do recorte na textura original (1920x1080)
+        vec2 cropOrigin = (u_textureSize - u_cropSize) * 0.5;
+
+        // Posição do pixel central do bloco na área recortada
+        // Cada bloco tem tamanho u_blockSize, centro fica em blockIndex*u_blockSize + u_blockSize/2
+        vec2 blockCenterInCrop = blockIndex * u_blockSize + (u_blockSize * 0.5);
+
+        // Posição do pixel no espaço da textura original (1920x1080)
+        vec2 samplePos = cropOrigin + blockCenterInCrop;
+
+        // Converter para coordenadas UV (0..1)
+        vec2 sampleUV = samplePos / u_textureSize;
+
+        // Amostrar a cor do pixel central do bloco
+        vec4 color = texture2D(u_texture, sampleUV);
 
         gl_FragColor = color;
-      }
-    `,
+    }`,
     crt: `precision mediump float;
 
     varying vec2 v_texCoord;
@@ -438,7 +462,12 @@
 
     videoAspect = video.videoWidth / video.videoHeight;
 
-    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
+    //gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
+
+    gl.uniform2f(u_textureSizeLocation, 1920.0, 1080.0);
+    gl.uniform2f(u_cropSizeLocation, 1440.0, 1080.0);
+    gl.uniform1f(u_blockSizeLocation, 4.5);
+    gl.uniform2f(u_outputSizeLocation, 960.0, 720.0); // pois 320*3=960, 240*3=720
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
@@ -494,7 +523,7 @@
         ctx.drawImage(
           video,             // vídeo fonte
           0, 0, 1920, 1080,  // área completa do vídeo
-          0, 0, 1280, 720     // área do canvas a desenhar (com escala)
+          0, 0, 960, 720     // área do canvas a desenhar (com escala)
         );
 
         gl.texImage2D(
