@@ -148,7 +148,7 @@
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas" width="960" height="720"></canvas>
+  <canvas id="canvas" width="1440" height="720"></canvas>
   <div id="crt-overlay"></div>
 </div>
 <div id="fps">FPS: 0</div>
@@ -183,7 +183,7 @@
 
   const resolutions = {
     ps1gbsc: {
-      width: 320,
+      width: 480,
       height: 240,
     }
   }
@@ -437,7 +437,7 @@
     gl.uniform2f(gl.getUniformLocation(program, 'u_textureSize'), 1920.0, 1080.0);
     gl.uniform2f(gl.getUniformLocation(program, 'u_cropSize'), 1440.0, 1080.0);
     gl.uniform1f(gl.getUniformLocation(program, 'u_blockSize'), 4.5);
-    gl.uniform2f(gl.getUniformLocation(program, 'u_outputSize'), 960.0, 720.0); // pois 320*3=960, 240*3=720
+    gl.uniform2f(gl.getUniformLocation(program, 'u_outputSize'), 1440.0, 720.0); // pois 320*3=960, 240*3=720
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
