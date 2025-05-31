@@ -167,6 +167,8 @@
   const fpsDisplay = document.getElementById('fps');
   const overlay = document.getElementById('crt-overlay')
 
+  canvas.imageSmoothingEnabled = false;
+
   let videoStream;
   let audioStream;
   let gl;
@@ -475,15 +477,11 @@
 
   function startRenderLoop() {
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = resolution.width;
-    tempCanvas.height = resolution.height;
+    tempCanvas.width = resolution.width * 3;
+    tempCanvas.height = resolution.height * 3;
 
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.imageSmoothingEnabled = false;
-
-    const ctx = canvas.getContext('2d');
-
-    canvas.imageSmoothingEnabled = false;
     
     function render(now) {
       if (video.readyState >= 2) { // HAVE_CURRENT_DATA
@@ -494,9 +492,11 @@
 
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctx.drawImage(tempCanvas, 0, 0, resolution.width, resolution.height, 0, 0, resolution.width * 3, resolution.height * 3);
+        tempCtx.drawImage(
+          video,             // vídeo fonte
+          0, 0, 1920, 1080,  // área completa do vídeo
+          0, 0, resolution.width * 3, resolution.height * 3 // área do canvas a desenhar (com escala)
+        );
 
         gl.texImage2D(
           gl.TEXTURE_2D,
@@ -504,7 +504,7 @@
           gl.RGBA,
           gl.RGBA,
           gl.UNSIGNED_BYTE,
-          offCanvas
+          tempCanvas
         );
 
         gl.clearColor(0, 0, 0, 1);
