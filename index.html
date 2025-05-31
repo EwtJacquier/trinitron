@@ -464,10 +464,10 @@
 
     //gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
-    gl.uniform2f(u_textureSizeLocation, 1920.0, 1080.0);
-    gl.uniform2f(u_cropSizeLocation, 1440.0, 1080.0);
-    gl.uniform1f(u_blockSizeLocation, 4.5);
-    gl.uniform2f(u_outputSizeLocation, 960.0, 720.0); // pois 320*3=960, 240*3=720
+    gl.uniform2f(gl.getUniformLocation(program, 'u_textureSizeLocation'), 1920.0, 1080.0);
+    gl.uniform2f(gl.getUniformLocation(program, 'u_cropSizeLocation'), 1440.0, 1080.0);
+    gl.uniform1f(gl.getUniformLocation(program, 'u_blockSizeLocation'), 4.5);
+    gl.uniform2f(gl.getUniformLocation(program, 'u_outputSizeLocation'), 960.0, 720.0); // pois 320*3=960, 240*3=720
 
     window.addEventListener('resize', () => {
       updatePositionsForAspectRatio();
