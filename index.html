@@ -468,7 +468,7 @@
 
     //gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
-    gl.uniform2f(gl.getUniformLocation(program, 'u_textureSize'), filter.value === 'crt' ? 2880.0 : 1920.0, filter.value === 'crt' ? 1440.0 : 1080.0);
+    gl.uniform2f(gl.getUniformLocation(program, 'u_textureSize'), 1440.0, 720.0);
     gl.uniform2f(gl.getUniformLocation(program, 'u_cropSize'), 1440.0, 1080.0);
     gl.uniform1f(gl.getUniformLocation(program, 'u_blockSize'), 4.5);
     gl.uniform2f(gl.getUniformLocation(program, 'u_outputSize'), 1440.0, 720.0); // pois 320*3=960, 240*3=720
