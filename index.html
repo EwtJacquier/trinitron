@@ -65,9 +65,9 @@
 
     #container.ps1gbsc #canvas {
       width: 148%;
-      height: 103%;
+      height: 104%;
       margin-left: -0.5%;
-      margin-top: -1.5%;
+      margin-top: -1%;
     }
 
     #container.ps1retroscaler2x {
@@ -216,85 +216,100 @@
     }`,
     crt: `precision mediump float;
 
-    varying vec2 v_texCoord;
-    uniform sampler2D u_texture;
-    uniform vec2 u_textureSize;
+varying vec2 v_texCoord;
+uniform sampler2D u_texture;
+uniform vec2 u_textureSize;
 
-    // Parâmetros internos dos "pixels lógicos"
-    const float pixelBlockSize = 3.0;
+// Parâmetros internos dos "pixels lógicos"
+const float pixelBlockSize = 3.0;
 
-    // --- SCANLINES CONFIG ---
-    // Horizontais
-    const bool enableHorizontalScanlines = true;
-    const float horizontalSpacing = 3.0;
-    const float horizontalThickness = 1.0;
-    const float horizontalIntensity = 0.4;
+// --- GRADIENTE CONFIG ---
+const float blendFactor = 0.55;         // força do blend (como já estava)
+const float maxBlendDistance = 0.5;     // distância máxima de cor para aplicar blend total (0.0 = sem blend, 1.0 = sempre blend)
 
-    // Verticais
-    const bool enableVerticalScanlines = true;
-    const float verticalSpacing = 3.0;
-    const float verticalThickness = 1.0;
-    const float verticalIntensity = 0.1;
+// --- SCANLINES CONFIG ---
+const bool enableHorizontalScanlines = true;
+const float horizontalSpacing = 3.0;
+const float horizontalThickness = 1.0;
+const float horizontalIntensity = 0.4;
 
-    void main() {
-      vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
+const bool enableVerticalScanlines = true;
+const float verticalSpacing = 3.0;
+const float verticalThickness = 1.0;
+const float verticalIntensity = 0.1;
 
-      vec2 blockCoord = (v_texCoord * u_textureSize) / pixelBlockSize;
-      vec2 cellIndex = floor(blockCoord);
-      vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
+// Função auxiliar para limitar o blend baseado na diferença de cor
+float limitedMixFactor(vec3 a, vec3 b, float baseFactor) {
+    float colorDistance = distance(a, b);
+    float attenuation = clamp(1.0 - (colorDistance / maxBlendDistance), 0.0, 1.0);
+    return baseFactor * attenuation;
+}
 
-      vec2 baseCoord = (cellIndex + 0.5) * cellSize;
-      vec4 center = texture2D(u_texture, baseCoord);
+void main() {
+  vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
 
-      vec4 left = cellIndex.x > 0.0
-                  ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize)
-                  : center;
-      vec4 right = cellIndex.x < (u_textureSize.x / pixelBlockSize) - 1.0
-                  ? texture2D(u_texture, (cellIndex + vec2(1.0, 0.0) + 0.5) * cellSize)
-                  : center;
-      vec4 top = cellIndex.y > 0.0
-                ? texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize)
+  vec2 blockCoord = (v_texCoord * u_textureSize) / pixelBlockSize;
+  vec2 cellIndex = floor(blockCoord);
+  vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
+
+  vec2 baseCoord = (cellIndex + 0.5) * cellSize;
+  vec4 center = texture2D(u_texture, baseCoord);
+
+  vec4 left = cellIndex.x > 0.0
+              ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize)
+              : center;
+  vec4 right = cellIndex.x < (u_textureSize.x / pixelBlockSize) - 1.0
+              ? texture2D(u_texture, (cellIndex + vec2(1.0, 0.0) + 0.5) * cellSize)
+              : center;
+  vec4 top = cellIndex.y > 0.0
+            ? texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize)
+            : center;
+  vec4 bottom = cellIndex.y < (u_textureSize.y / pixelBlockSize) - 1.0
+                ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize)
                 : center;
-      vec4 bottom = cellIndex.y < (u_textureSize.y / pixelBlockSize) - 1.0
-                    ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize)
-                    : center;
 
-      vec4 horiz;
-      if (localPos.x < 1.0)
-        horiz = mix(left, center, (localPos.x + 1.0) * 0.55);
-      else if (localPos.x > 2.0)
-        horiz = mix(center, right, (localPos.x - 1.0) * 0.55);
-      else
-        horiz = center;
+  vec4 horiz;
+  if (localPos.x < 1.0) {
+    float mixF = limitedMixFactor(left.rgb, center.rgb, (localPos.x + 1.0) * blendFactor);
+    horiz = mix(left, center, mixF);
+  } else if (localPos.x > 2.0) {
+    float mixF = limitedMixFactor(center.rgb, right.rgb, (localPos.x - 1.0) * blendFactor);
+    horiz = mix(center, right, mixF);
+  } else {
+    horiz = center;
+  }
 
-      vec4 finalColor;
-      if (localPos.y < 1.0)
-        finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.55);
-      else if (localPos.y > 2.0)
-        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.55);
-      else
-        finalColor = horiz;
+  vec4 finalColor;
+  if (localPos.y < 1.0) {
+    float mixF = limitedMixFactor(top.rgb, horiz.rgb, (localPos.y + 1.0) * blendFactor);
+    finalColor = mix(top, horiz, mixF);
+  } else if (localPos.y > 2.0) {
+    float mixF = limitedMixFactor(horiz.rgb, bottom.rgb, (localPos.y - 1.0) * blendFactor);
+    finalColor = mix(horiz, bottom, mixF);
+  } else {
+    finalColor = horiz;
+  }
 
-      vec2 fragCoord = v_texCoord * u_textureSize;
+  vec2 fragCoord = v_texCoord * u_textureSize;
 
-      // Scanlines horizontais
-      if (enableHorizontalScanlines) {
-        float modY = mod(fragCoord.y, horizontalSpacing);
-        if (modY < horizontalThickness) {
-          finalColor.rgb *= (1.0 - horizontalIntensity);
-        }
-      }
+  // Scanlines horizontais
+  if (enableHorizontalScanlines) {
+    float modY = mod(fragCoord.y, horizontalSpacing);
+    if (modY < horizontalThickness) {
+      finalColor.rgb *= (1.0 - horizontalIntensity);
+    }
+  }
 
-      // Scanlines verticais
-      if (enableVerticalScanlines) {
-        float modX = mod(fragCoord.x, verticalSpacing);
-        if (modX < verticalThickness) {
-          finalColor.rgb *= (1.0 - verticalIntensity);
-        }
-      }
+  // Scanlines verticais
+  if (enableVerticalScanlines) {
+    float modX = mod(fragCoord.x, verticalSpacing);
+    if (modX < verticalThickness) {
+      finalColor.rgb *= (1.0 - verticalIntensity);
+    }
+  }
 
-      gl_FragColor = finalColor;
-    }`,
+  gl_FragColor = finalColor;
+}`,
     sharpen: `precision mediump float;
 
       varying vec2 v_texCoord;
