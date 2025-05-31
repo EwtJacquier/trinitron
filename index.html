@@ -202,24 +202,27 @@
 
     varying vec2 v_texCoord;
     uniform sampler2D u_texture;
-    uniform vec2 u_textureSize;
+    uniform vec2 u_textureSize;     // tamanho da textura original, ex: 1440x720
+    uniform vec2 u_canvasSize;      // tamanho do canvas, ex: 2880x1440
 
     void main() {
+      float scale = u_canvasSize.x / u_textureSize.x;  // deve ser 2.0 aqui
+
+      // Mapear a coordenada do canvas para a coordenada da textura original:
+      vec2 texCoordOriginal = v_texCoord / scale;
+
       float pixelBlockSize = 3.0;
 
-      // Tamanho de cada "pixel lógico" na textura
       vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
 
-      // Coordenada do bloco e posição local dentro dele
-      vec2 blockCoord = (v_texCoord * u_textureSize * 2.0) / pixelBlockSize;
+      vec2 blockCoord = (texCoordOriginal * u_textureSize) / pixelBlockSize;
       vec2 cellIndex = floor(blockCoord);
       vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
 
-      // Coordenada central do bloco atual
       vec2 baseCoord = (cellIndex + 0.5) * cellSize;
+
       vec4 center = texture2D(u_texture, baseCoord);
 
-      // Vizinhos com bordas protegidas
       vec4 left = cellIndex.x > 0.0
                   ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize)
                   : center;
@@ -233,7 +236,6 @@
                     ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize)
                     : center;
 
-      // Blend horizontal
       vec4 horiz;
       if (localPos.x < 1.0)
         horiz = mix(left, center, (localPos.x + 1.0) * 0.9);
@@ -242,7 +244,6 @@
       else
         horiz = center;
 
-      // Blend vertical
       vec4 finalColor;
       if (localPos.y < 1.0)
         finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.9);
@@ -455,6 +456,7 @@
     //gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
     gl.uniform2f(gl.getUniformLocation(program, 'u_textureSize'), 1440.0, 720.0);
+    gl.uniform2f(gl.getUniformLocation(program, 'u_canvasSize'), 2880.0, 1440.0);
     gl.uniform2f(gl.getUniformLocation(program, 'u_cropSize'), 1440.0, 1080.0);
     gl.uniform1f(gl.getUniformLocation(program, 'u_blockSize'), 4.5);
     gl.uniform2f(gl.getUniformLocation(program, 'u_outputSize'), 1440.0, 720.0); // pois 320*3=960, 240*3=720
