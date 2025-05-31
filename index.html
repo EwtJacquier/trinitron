@@ -148,7 +148,7 @@
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas" width="1440" height="720"></canvas>
+  <canvas id="canvas" width="2880" height="1440"></canvas>
   <div id="crt-overlay"></div>
 </div>
 <div id="fps">FPS: 0</div>
@@ -211,7 +211,7 @@
       vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
 
       // Coordenada do bloco e posição local dentro dele
-      vec2 blockCoord = (v_texCoord * u_textureSize) / pixelBlockSize;
+      vec2 blockCoord = (v_texCoord * u_textureSize * 2.0) / pixelBlockSize;
       vec2 cellIndex = floor(blockCoord);
       vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
 
