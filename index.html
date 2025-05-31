@@ -205,27 +205,21 @@
     uniform vec2 u_textureSize;
 
     void main() {
-      // === CONFIGURAÇÕES ===
-      float pixelBlockSize = 3.0;    // Tamanho do "bloco" original (já vindo da fonte)
-      float upscale = 2.0;           // Fator de escala
-      float scanlineIntensity = 0.4; // 0.0 = sem scanline, 1.0 = preto total
+      float pixelBlockSize = 3.0;
 
-      // === ESCALA INVERSA para voltar à resolução original ===
-      vec2 scaledCoord = v_texCoord / upscale;
-
-      // Tamanho de cada "pixel lógico" na textura original
+      // Tamanho de cada "pixel lógico" na textura
       vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
 
-      // Coordenada do bloco e posição local
-      vec2 blockCoord = (scaledCoord * u_textureSize) / pixelBlockSize;
+      // Coordenada do bloco e posição local dentro dele
+      vec2 blockCoord = (v_texCoord * u_textureSize) / pixelBlockSize;
       vec2 cellIndex = floor(blockCoord);
       vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
 
-      // Centro do bloco
+      // Coordenada central do bloco atual
       vec2 baseCoord = (cellIndex + 0.5) * cellSize;
       vec4 center = texture2D(u_texture, baseCoord);
 
-      // Vizinhos
+      // Vizinhos com bordas protegidas
       vec4 left = cellIndex.x > 0.0
                   ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize)
                   : center;
@@ -256,11 +250,6 @@
         finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.9);
       else
         finalColor = horiz;
-
-      // === SCANLINES ===
-      float line = fract(v_texCoord.y * u_textureSize.y / pixelBlockSize);
-      float scan = mix(1.0, scanlineIntensity, smoothstep(0.45, 0.55, line));
-      finalColor.rgb *= scan;
 
       gl_FragColor = finalColor;
     }`,
@@ -462,9 +451,6 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
     //videoAspect = video.videoWidth / video.videoHeight;
-
-    canvas.width = filter.value === 'crt' ? 2880 : 1920;
-    canvas.height = filter.value === 'crt' ? 1440 : 1080;
 
     //gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
