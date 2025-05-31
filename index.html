@@ -261,17 +261,17 @@
 
       vec4 horiz;
       if (localPos.x < 1.0)
-        horiz = mix(left, center, (localPos.x + 1.0) * 0.7);
+        horiz = mix(left, center, (localPos.x + 1.0) * 0.55);
       else if (localPos.x > 2.0)
-        horiz = mix(center, right, (localPos.x - 1.0) * 0.7);
+        horiz = mix(center, right, (localPos.x - 1.0) * 0.55);
       else
         horiz = center;
 
       vec4 finalColor;
       if (localPos.y < 1.0)
-        finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.7);
+        finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.55);
       else if (localPos.y > 2.0)
-        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.7);
+        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.55);
       else
         finalColor = horiz;
 
