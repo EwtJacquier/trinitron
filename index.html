@@ -179,54 +179,22 @@
 
   let videoAspect;
 
+  const resolutions = {
+    ps1gbsc: {
+      width: 320,
+      height: 240,
+    }
+  }
+
+  let resolution = resolutions.ps1gbsc;
+
   const filters = {
     original: `precision mediump float;
-
-    varying vec2 v_texCoord;
     uniform sampler2D u_texture;
-    uniform vec2 u_textureSize;   // (1920, 1080)
-    uniform vec2 u_cropSize;      // (1440, 1080)
-    uniform float u_blockSize;    // 4.5
-    uniform vec2 u_outputSize;    // tamanho do canvas de saída (ex: 960, 720)
+    varying vec2 v_texCoord;
 
     void main() {
-        // Coordenada do fragmento na tela de saída, em pixels
-        // Transformar v_texCoord (0..1) para pixels da saída
-        vec2 fragCoord = v_texCoord * u_outputSize;
-
-        // Quantidade de blocos na horizontal e vertical na imagem recortada
-        vec2 blocksCount = vec2(
-            floor(u_cropSize.x / u_blockSize),
-            floor(u_cropSize.y / u_blockSize)
-        );
-
-        // Cada bloco será expandido para 3x3 pixels, então a saída tem blocksCount * 3 pixels
-        // Então, fragCoord indica qual pixel da saída, precisamos saber qual bloco ele pertence:
-        vec2 blockIndex = floor(fragCoord / 3.0);
-
-        // Evitar ultrapassar os blocos
-        if (blockIndex.x >= blocksCount.x || blockIndex.y >= blocksCount.y) {
-            gl_FragColor = vec4(0.0); // transparente/preto fora da área
-            return;
-        }
-
-        // Centro do recorte na textura original (1920x1080)
-        vec2 cropOrigin = (u_textureSize - u_cropSize) * 0.5;
-
-        // Posição do pixel central do bloco na área recortada
-        // Cada bloco tem tamanho u_blockSize, centro fica em blockIndex*u_blockSize + u_blockSize/2
-        vec2 blockCenterInCrop = blockIndex * u_blockSize + (u_blockSize * 0.5);
-
-        // Posição do pixel no espaço da textura original (1920x1080)
-        vec2 samplePos = cropOrigin + blockCenterInCrop;
-
-        // Converter para coordenadas UV (0..1)
-        vec2 sampleUV = samplePos / u_textureSize;
-
-        // Amostrar a cor do pixel central do bloco
-        vec4 color = texture2D(u_texture, sampleUV);
-
-        gl_FragColor = color;
+        gl_FragColor = texture2D(u_texture, v_texCoord);
     }`,
     crt: `precision mediump float;
 
@@ -506,25 +474,27 @@
   }
 
   function startRenderLoop() {
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = 1280;
-    offCanvas.height = 720;
-    const ctx = offCanvas.getContext('2d');
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = resolution.width;
+    tempCanvas.height = resolution.height;
+
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.imageSmoothingEnabled = false;
+
+    canvas.imageSmoothingEnabled = false;
     
     function render(now) {
       if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+        // Desenha em baixa resolução primeiro
+        tempCtx.drawImage(video, 0, 0, resolution.width, resolution.height);
+
         gl.viewport(0, 0, canvas.width, canvas.height);
 
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
-        const videoWidth = video.videoWidth;
-        const videoHeight = video.videoHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        ctx.drawImage(
-          video,             // vídeo fonte
-          0, 0, 1920, 1080,  // área completa do vídeo
-          0, 0, 960, 720     // área do canvas a desenhar (com escala)
-        );
+        ctx.drawImage(tempCanvas, 0, 0, resolution.width, resolution.height, 0, 0, resolution.width * 3, resolution.height * 3);
 
         gl.texImage2D(
           gl.TEXTURE_2D,
