@@ -18,6 +18,10 @@
       transform: translate(-50%, -50%);
       image-rendering: pixelated;
     }
+    .crt #canvas {
+      image-rendering: auto;
+      filter: saturate(1.1) brightness(1.2);
+    }
     #menu {
       position: absolute;
       top: 50%; 
@@ -53,6 +57,17 @@
     #container.snesanalogue #canvas {
       width: 178%;
       height: 107%;
+    }
+
+    #container.ps1retroscaler2x {
+      aspect-ratio: 280 / 240;
+    }
+
+    #container.ps1gbsc #canvas {
+      width: 148%;
+      height: 103%;
+      margin-left: -0.5%;
+      margin-top: -1.5%;
     }
 
     #container.ps1retroscaler2x {
@@ -130,6 +145,7 @@
   <label>Aspect Ratio:
     <select id="ratio">
       <option value="snesanalogue">Super Nintendo (Analogue NT)</option>
+      <option value="ps1gbsc">PS1 (GBS-C, 1080p)</option>
       <option value="n64retroscaler2x">Nintendo 64 (Retro Scaler 2x)</option>
       <option value="ps1retroscaler2x">PS1 (Retro Scaler 2x)</option>
       <option value="ps2retroscaler2x">PS2 (Retro Scaler 2x)</option>
@@ -204,22 +220,32 @@
     uniform sampler2D u_texture;
     uniform vec2 u_textureSize;
 
-    void main() {
-      float pixelBlockSize = 3.0;
+    // Parâmetros internos dos "pixels lógicos"
+    const float pixelBlockSize = 3.0;
 
-      // Tamanho de cada "pixel lógico" na textura
+    // --- SCANLINES CONFIG ---
+    // Horizontais
+    const bool enableHorizontalScanlines = true;
+    const float horizontalSpacing = 3.0;
+    const float horizontalThickness = 1.0;
+    const float horizontalIntensity = 0.4;
+
+    // Verticais
+    const bool enableVerticalScanlines = true;
+    const float verticalSpacing = 3.0;
+    const float verticalThickness = 1.0;
+    const float verticalIntensity = 0.1;
+
+    void main() {
       vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
 
-      // Coordenada do bloco e posição local dentro dele
       vec2 blockCoord = (v_texCoord * u_textureSize) / pixelBlockSize;
       vec2 cellIndex = floor(blockCoord);
       vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
 
-      // Coordenada central do bloco atual
       vec2 baseCoord = (cellIndex + 0.5) * cellSize;
       vec4 center = texture2D(u_texture, baseCoord);
 
-      // Vizinhos com bordas protegidas
       vec4 left = cellIndex.x > 0.0
                   ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize)
                   : center;
@@ -233,23 +259,39 @@
                     ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize)
                     : center;
 
-      // Blend horizontal
       vec4 horiz;
       if (localPos.x < 1.0)
-        horiz = mix(left, center, (localPos.x + 1.0) * 0.9);
+        horiz = mix(left, center, (localPos.x + 1.0) * 0.7);
       else if (localPos.x > 2.0)
-        horiz = mix(center, right, (localPos.x - 1.0) * 0.9);
+        horiz = mix(center, right, (localPos.x - 1.0) * 0.7);
       else
         horiz = center;
 
-      // Blend vertical
       vec4 finalColor;
       if (localPos.y < 1.0)
-        finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.9);
+        finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.7);
       else if (localPos.y > 2.0)
-        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.9);
+        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.7);
       else
         finalColor = horiz;
+
+      vec2 fragCoord = v_texCoord * u_textureSize;
+
+      // Scanlines horizontais
+      if (enableHorizontalScanlines) {
+        float modY = mod(fragCoord.y, horizontalSpacing);
+        if (modY < horizontalThickness) {
+          finalColor.rgb *= (1.0 - horizontalIntensity);
+        }
+      }
+
+      // Scanlines verticais
+      if (enableVerticalScanlines) {
+        float modX = mod(fragCoord.x, verticalSpacing);
+        if (modX < verticalThickness) {
+          finalColor.rgb *= (1.0 - verticalIntensity);
+        }
+      }
 
       gl_FragColor = finalColor;
     }`,
@@ -366,6 +408,7 @@
     const ratio = aspect.value;
 
     container.classList.add(ratio);
+    container.classList.add(filter.value);
     
     if ( filter.value === 'crt' ) {
       overlay.style.display = 'block';
