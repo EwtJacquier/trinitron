@@ -205,31 +205,62 @@
     uniform vec2 u_textureSize;
 
     void main() {
-      // Cada pixel é expandido para 3x3 blocos
-      vec2 cellSize = 1.0 / u_textureSize;
+      // === CONFIGURAÇÕES ===
+      float pixelBlockSize = 3.0;    // Tamanho do "bloco" original (já vindo da fonte)
+      float upscale = 2.0;           // Fator de escala
+      float scanlineIntensity = 0.4; // 0.0 = sem scanline, 1.0 = preto total
 
-      // Mapeia o pixel atual de volta ao centro do pixel original
-      vec2 pos = v_texCoord * (u_textureSize * 3.0);
-      vec2 cellIndex = floor(pos / 3.0);
-      vec2 localPos = mod(pos, 3.0);
+      // === ESCALA INVERSA para voltar à resolução original ===
+      vec2 scaledCoord = v_texCoord / upscale;
 
+      // Tamanho de cada "pixel lógico" na textura original
+      vec2 cellSize = vec2(pixelBlockSize) / u_textureSize;
+
+      // Coordenada do bloco e posição local
+      vec2 blockCoord = (scaledCoord * u_textureSize) / pixelBlockSize;
+      vec2 cellIndex = floor(blockCoord);
+      vec2 localPos = mod(blockCoord, 1.0) * pixelBlockSize;
+
+      // Centro do bloco
       vec2 baseCoord = (cellIndex + 0.5) * cellSize;
       vec4 center = texture2D(u_texture, baseCoord);
 
-      vec4 left = cellIndex.x > 0.0 ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize) : center;
-      vec4 right = cellIndex.x < u_textureSize.x - 1.0 ? texture2D(u_texture, (cellIndex + vec2(1.0, 0.0) + 0.5) * cellSize) : center;
-      vec4 top = cellIndex.y > 0.0 ? texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize) : center;
-      vec4 bottom = cellIndex.y < u_textureSize.y - 1.0 ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize) : center;
+      // Vizinhos
+      vec4 left = cellIndex.x > 0.0
+                  ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize)
+                  : center;
+      vec4 right = cellIndex.x < (u_textureSize.x / pixelBlockSize) - 1.0
+                  ? texture2D(u_texture, (cellIndex + vec2(1.0, 0.0) + 0.5) * cellSize)
+                  : center;
+      vec4 top = cellIndex.y > 0.0
+                ? texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize)
+                : center;
+      vec4 bottom = cellIndex.y < (u_textureSize.y / pixelBlockSize) - 1.0
+                    ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize)
+                    : center;
 
+      // Blend horizontal
       vec4 horiz;
-      if (localPos.x < 1.0) horiz = mix(left, center, (localPos.x + 1.0) * 0.9);
-      else if (localPos.x > 1.0) horiz = mix(center, right, (localPos.x - 1.0) * 0.9);
-      else horiz = center;
+      if (localPos.x < 1.0)
+        horiz = mix(left, center, (localPos.x + 1.0) * 0.9);
+      else if (localPos.x > 2.0)
+        horiz = mix(center, right, (localPos.x - 1.0) * 0.9);
+      else
+        horiz = center;
 
+      // Blend vertical
       vec4 finalColor;
-      if (localPos.y < 1.0) finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.9);
-      else if (localPos.y > 1.0) finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.9);
-      else finalColor = horiz;
+      if (localPos.y < 1.0)
+        finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.9);
+      else if (localPos.y > 2.0)
+        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.9);
+      else
+        finalColor = horiz;
+
+      // === SCANLINES ===
+      float line = fract(v_texCoord.y * u_textureSize.y / pixelBlockSize);
+      float scan = mix(1.0, scanlineIntensity, smoothstep(0.45, 0.55, line));
+      finalColor.rgb *= scan;
 
       gl_FragColor = finalColor;
     }`,
