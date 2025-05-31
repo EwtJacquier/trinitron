@@ -177,57 +177,62 @@
   let lastTime = performance.now();
   let frames = 0;
 
-  let videoAspect;
+  //let videoAspect;
 
   const filters = {
     original: `precision mediump float;
 
-    varying vec2 v_texCoord;
-    uniform sampler2D u_texture;
-    uniform vec2 u_textureSize;   // (1920, 1080)
-    uniform vec2 u_cropSize;      // (1440, 1080)
-    uniform float u_blockSize;    // 4.5
-    uniform vec2 u_outputSize;    // tamanho do canvas de saída (ex: 960, 720)
+varying vec2 v_texCoord;
+uniform sampler2D u_texture;
+uniform vec2 u_textureSize;   // ex: (1920, 1080)
+uniform vec2 u_cropSize;      // ex: (1440, 1080)
+uniform float u_blockSize;    // ex: 4.5
+uniform vec2 u_outputSize;    // tamanho do canvas de saída (ex: 960, 720)
 
-    void main() {
-        // Coordenada do fragmento na tela de saída, em pixels
-        // Transformar v_texCoord (0..1) para pixels da saída
-        vec2 fragCoord = v_texCoord * u_outputSize;
+void main() {
+    // Coordenada do pixel na saída
+    vec2 fragCoord = v_texCoord * u_outputSize;
 
-        // Quantidade de blocos na horizontal e vertical na imagem recortada
-        vec2 blocksCount = vec2(
-            floor(u_cropSize.x / u_blockSize),
-            floor(u_cropSize.y / u_blockSize)
-        );
+    // Quantidade de blocos na horizontal e vertical na imagem recortada
+    vec2 blocksCount = vec2(
+        floor(u_cropSize.x / u_blockSize),
+        floor(u_cropSize.y / u_blockSize)
+    );
 
-        // Cada bloco será expandido para 3x3 pixels, então a saída tem blocksCount * 3 pixels
-        // Então, fragCoord indica qual pixel da saída, precisamos saber qual bloco ele pertence:
-        vec2 blockIndex = floor(fragCoord / 3.0);
+    // Índice do bloco referente ao pixel atual
+    vec2 blockIndex = floor(fragCoord / 3.0);
 
-        // Evitar ultrapassar os blocos
-        if (blockIndex.x >= blocksCount.x || blockIndex.y >= blocksCount.y) {
-            gl_FragColor = vec4(0.0); // transparente/preto fora da área
-            return;
-        }
+    // Se fragmento está fora dos blocos, pinta azul
+    if (blockIndex.x >= blocksCount.x || blockIndex.y >= blocksCount.y) {
+        gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0); // azul
+        return;
+    }
 
-        // Centro do recorte na textura original (1920x1080)
-        vec2 cropOrigin = (u_textureSize - u_cropSize) * 0.5;
+    // Origem do recorte na textura original
+    vec2 cropOrigin = (u_textureSize - u_cropSize) * 0.5;
 
-        // Posição do pixel central do bloco na área recortada
-        // Cada bloco tem tamanho u_blockSize, centro fica em blockIndex*u_blockSize + u_blockSize/2
-        vec2 blockCenterInCrop = blockIndex * u_blockSize + (u_blockSize * 0.5);
+    // Posição do centro do bloco na área recortada
+    vec2 blockCenterInCrop = blockIndex * u_blockSize + (u_blockSize * 0.5);
 
-        // Posição do pixel no espaço da textura original (1920x1080)
-        vec2 samplePos = cropOrigin + blockCenterInCrop;
+    // Posição na textura original (pixels)
+    vec2 samplePos = cropOrigin + blockCenterInCrop;
 
-        // Converter para coordenadas UV (0..1)
-        vec2 sampleUV = samplePos / u_textureSize;
+    // Converte para UV (inverte Y para teste)
+    vec2 sampleUV = vec2(samplePos.x / u_textureSize.x, 1.0 - samplePos.y / u_textureSize.y);
 
-        // Amostrar a cor do pixel central do bloco
-        vec4 color = texture2D(u_texture, sampleUV);
+    // Debug: se UV fora do intervalo, pinta vermelho
+    if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) {
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // vermelho
+        return;
+    }
 
-        gl_FragColor = color;
-    }`,
+    // Amostra a cor do pixel central do bloco
+    vec4 color = texture2D(u_texture, sampleUV);
+
+    // Se chegou aqui, pinta a cor normalmente
+    gl_FragColor = color;
+}
+`,
     crt: `precision mediump float;
 
     varying vec2 v_texCoord;
@@ -460,7 +465,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    videoAspect = video.videoWidth / video.videoHeight;
+    //videoAspect = video.videoWidth / video.videoHeight;
 
     //gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
