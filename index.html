@@ -147,7 +147,7 @@
 <video id="video" autoplay playsinline muted style="display:none;"></video>
 <audio id="audio" autoplay controls style="display:none;"></audio>
 <div id="container">
-  <canvas id="canvas" width="3840" height="2160"></canvas>
+  <canvas id="canvas" width="2562" height="1440"></canvas>
   <div id="crt-overlay"></div>
 </div>
 <div id="fps">FPS: 0</div>
@@ -478,8 +478,8 @@
 
   function startRenderLoop() {
     const offCanvas = document.createElement('canvas');
-    offCanvas.width = 1280;
-    offCanvas.height = 720;
+    offCanvas.width = 854;
+    offCanvas.height = 480;
     const ctx = offCanvas.getContext('2d');
     
     function render(now) {
@@ -494,7 +494,7 @@
         ctx.drawImage(
           video,             // vídeo fonte
           0, 0, 1920, 1080,  // área completa do vídeo
-          0, 0, 1280, 720     // área do canvas a desenhar (com escala)
+          0, 0, 854, 480     // área do canvas a desenhar (com escala)
         );
 
         gl.texImage2D(
