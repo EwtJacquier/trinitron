@@ -222,7 +222,7 @@
       const bool enableHorizontalScanlines = true;
       const float horizontalSpacing = 1.0;
       const float horizontalThickness = 0.5;
-      const float horizontalIntensity = 0.6;
+      const float horizontalIntensity = 0.4;
 
       const bool enableVerticalScanlines = true;
       const float verticalSpacing = 1.0;
@@ -517,6 +517,8 @@
     offCanvas.width = 854;
     offCanvas.height = 480;
     const ctx = offCanvas.getContext('2d');
+
+    ctx.imageSmoothingEnabled = false;
     
     function render(now) {
       if (video.readyState >= 2) { // HAVE_CURRENT_DATA
