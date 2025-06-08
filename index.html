@@ -60,7 +60,8 @@
       height: 107%;
     }
 
-    #container.ps1retroscaler2x {
+    #container.ps1retroscaler2x,
+    #container.ps1gbs {
       aspect-ratio: 280 / 240;
     }
 
@@ -68,6 +69,13 @@
       width: 113%;
       height: 100%;
       margin-left: -1.2%;
+    }
+
+    #container.ps1gbs #canvas {
+      width: 148%;
+      height: 103%;
+      margin-left: -0.5%;
+      margin-top: -1.5%;
     }
 
     #container.ps2retroscaler2x {
@@ -137,6 +145,7 @@
       <option value="snesanalogue">Super Nintendo (Analogue NT)</option>
       <option value="n64retroscaler2x">Nintendo 64 (Retro Scaler 2x)</option>
       <option value="ps1retroscaler2x">PS1 (Retro Scaler 2x)</option>
+      <option value="ps1gbs">PS1 (GBS-C)</option>
       <option value="ps2retroscaler2x">PS2 (Retro Scaler 2x)</option>
     </select>
   </label><br>
