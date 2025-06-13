@@ -219,71 +219,7 @@
         gl_FragColor = color;
       }
     `,
-    crtCrispy: `precision mediump float;
-
-    varying vec2 v_texCoord;
-    uniform sampler2D u_texture;
-    uniform vec2 u_textureSize;
-
-    void main() {
-
-      // --- SCANLINES CONFIG ---
-      const bool enableHorizontalScanlines = true;
-      const float horizontalSpacing = 1.0;
-      const float horizontalThickness = 0.5;
-      const float horizontalIntensity = 0.6;
-
-      const bool enableVerticalScanlines = false;
-      const float verticalSpacing = 1.0;
-      const float verticalThickness = 0.8;
-      const float verticalIntensity = 0.2;
-
-      // Cada pixel é expandido para 3x3 blocos
-      vec2 cellSize = 1.0 / u_textureSize;
-
-      // Mapeia o pixel atual de volta ao centro do pixel original
-      vec2 pos = v_texCoord * (u_textureSize * 3.0);
-      vec2 cellIndex = floor(pos / 3.0);
-      vec2 localPos = mod(pos, 3.0);
-
-      vec2 baseCoord = (cellIndex + 0.5) * cellSize;
-      vec4 center = texture2D(u_texture, baseCoord);
-
-      vec4 left = cellIndex.x > 0.0 ? texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize) : center;
-      vec4 right = cellIndex.x < u_textureSize.x - 1.0 ? texture2D(u_texture, (cellIndex + vec2(1.0, 0.0) + 0.5) * cellSize) : center;
-      vec4 top = cellIndex.y > 0.0 ? texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize) : center;
-      vec4 bottom = cellIndex.y < u_textureSize.y - 1.0 ? texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize) : center;
-
-      vec4 horiz;
-      if (localPos.x < 1.0) horiz = mix(left, center, (localPos.x + 1.0) * 0.9);
-      else if (localPos.x > 1.0) horiz = mix(center, right, (localPos.x - 1.0) * 0.9);
-      else horiz = center;
-
-      vec4 finalColor;
-      if (localPos.y < 1.0) finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.9);
-      else if (localPos.y > 1.0) finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.9);
-      else finalColor = horiz;
-
-      // --- SCANLINES ---
-      vec2 fragCoord = v_texCoord * u_textureSize;
-
-      if (enableHorizontalScanlines) {
-        float modY = mod(fragCoord.y, horizontalSpacing);
-        if (modY < horizontalThickness) {
-          finalColor.rgb *= (1.0 - horizontalIntensity);
-        }
-      }
-
-      if (enableVerticalScanlines) {
-        float modX = mod(fragCoord.x, verticalSpacing);
-        if (modX < verticalThickness) {
-          finalColor.rgb *= (1.0 - verticalIntensity);
-        }
-      }
-
-      gl_FragColor = finalColor;
-    }`,
-    crtBlend: `precision mediump float;
+    crt: `precision mediump float;
 
     varying vec2 v_texCoord;
     uniform sampler2D u_texture;
