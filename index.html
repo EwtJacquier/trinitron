@@ -302,37 +302,38 @@
     }`,
     sharpen: `precision mediump float;
 
-      varying vec2 v_texCoord;
-      uniform sampler2D u_texture;
-      uniform vec2 u_textureSize;
+    varying vec2 v_texCoord;
+    uniform sampler2D u_texture;
+    uniform vec2 u_textureSize;
 
-      void main() {
-        vec2 pixel = 1.0 / u_textureSize;
+    void main() {
+      vec2 pixel = 1.0 / u_textureSize;
 
-        // === SHARPEN PASS ===
-        vec4 center = texture2D(u_texture, v_texCoord);
-        vec4 up     = texture2D(u_texture, v_texCoord + vec2(0.0, -pixel.y));
-        vec4 down   = texture2D(u_texture, v_texCoord + vec2(0.0,  pixel.y));
-        vec4 left   = texture2D(u_texture, v_texCoord + vec2(-pixel.x, 0.0));
-        vec4 right  = texture2D(u_texture, v_texCoord + vec2( pixel.x, 0.0));
+      // === SHARPEN PASS ===
+      vec4 center = texture2D(u_texture, v_texCoord);
+      vec4 up     = texture2D(u_texture, v_texCoord + vec2(0.0, -pixel.y));
+      vec4 down   = texture2D(u_texture, v_texCoord + vec2(0.0,  pixel.y));
+      vec4 left   = texture2D(u_texture, v_texCoord + vec2(-pixel.x, 0.0));
+      vec4 right  = texture2D(u_texture, v_texCoord + vec2( pixel.x, 0.0));
 
-        vec4 sharpened = (5.0 * center) - up - down - left - right;
-        sharpened = clamp(sharpened, 0.0, 1.0);
+      vec4 rawSharpen = (5.0 * center) - up - down - left - right;
+      vec4 sharpened = mix(center, rawSharpen, 0.5); // ajuste fino da nitidez
+      sharpened = clamp(sharpened, 0.0, 1.0);
 
-        // === EDGE DETECTION for Anti-Aliasing ===
-        float contrast = length(center.rgb - 0.25 * (up.rgb + down.rgb + left.rgb + right.rgb));
+      // === EDGE DETECTION for Anti-Aliasing ===
+      float contrast = length(center.rgb - 0.25 * (up.rgb + down.rgb + left.rgb + right.rgb));
 
-        // === SMOOTHING PASS (antialias) ===
-        vec4 smoothColor = 0.25 * (left + right + up + down);
+      // === SMOOTHING PASS (antialias) ===
+      vec4 smoothColor = 0.25 * (left + right + up + down);
 
-        // Mix entre pixel sharpened e suavizado, baseado no contraste (edge threshold)
-        float edgeThreshold = 0.1;
-        float blendFactor = smoothstep(edgeThreshold, 0.5, contrast); // entre 0 e 1
+      // Mix entre sharpened e suavizado, baseado no contraste
+      float edgeThreshold = 0.1;
+      float blendFactor = smoothstep(edgeThreshold, 0.5, contrast);
 
-        vec4 finalColor = mix(sharpened, smoothColor, blendFactor);
+      vec4 finalColor = mix(sharpened, smoothColor, blendFactor);
 
-        gl_FragColor = finalColor;
-      }`
+      gl_FragColor = finalColor;
+    }`
   };
 
   // Fragment shader (GLSL) - fsSource
