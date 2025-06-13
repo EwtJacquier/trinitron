@@ -1,202 +1,220 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <title>CRT Webcam Viewer WebGL - Sem limitador de FPS</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0;
-      background: black; color: white;
-      height: 100%;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
-    #canvas {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
-    .crt #canvas {
-      filter: brightness(1.4) saturate(1.3);
-    }
-    .sharpen #canvas, .original #canvas {
-      image-rendering: pixelated;
-    }
-    #menu {
-      position: absolute;
-      top: 50%; 
-      left: 50%;
-      background: rgba(0,0,0,0.8);
-      padding: 15px;
-      border-radius: 8px;
-      z-index: 10;
-      transform: translate(-50%, -50%);
-    }
-    select, button {
-      margin: 5px 0;
-      padding: 5px;
-      width: 100%;
-    }
-    #container {
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: auto;
-      height: 95%;
-      z-index: 2;
-      border-radius: 50px;
-      overflow: hidden;
-      position: absolute;
-      max-height: 85vw;
-    }
+	<meta charset="UTF-8" />
+	<title>CRT Webcam Viewer WebGL - Sem limitador de FPS</title>
+	<style>
+		html,
+		body {
+			margin: 0;
+			padding: 0;
+			background: black;
+			color: white;
+			height: 100%;
+			overflow: hidden;
+			font-family: sans-serif;
+		}
 
-    #container.snesanalogue {
-      aspect-ratio: 260 / 240;
-    }
+		#canvas {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+		}
 
-    #container.snesanalogue #canvas {
-      width: 118%;
-      height: 108%;
-      margin-top: 0%;
-      margin-left: 0.5%;
-    }
+		.crt #canvas {
+			filter: brightness(1.4) saturate(1.3);
+		}
 
-    #container.ps1retroscaler2x,
-    #container.ps1gbs {
-      aspect-ratio: 280 / 240;
-    }
+		.sharpen #canvas,
+		.original #canvas {
+			image-rendering: pixelated;
+		}
 
-    #container.ps1retroscaler2x #canvas {
-      width: 113%;
-      height: 100%;
-      margin-left: -1.2%;
-    }
+		#menu {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 15px;
+			border-radius: 8px;
+			z-index: 10;
+			transform: translate(-50%, -50%);
+		}
 
-    #container.ps1gbs #canvas {
-      width: 148%;
-      height: 103.5%;
-      margin-left: -0.5%;
-      margin-top: -1.5%;
-    }
+		select,
+		button {
+			margin: 5px 0;
+			padding: 5px;
+			width: 100%;
+		}
 
-    #container.ps2retroscaler2x {
-      aspect-ratio: 280 / 240;
-    }
+		#container {
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			width: auto;
+			height: 95%;
+			z-index: 2;
+			border-radius: 50px;
+			overflow: hidden;
+			position: absolute;
+			max-height: 85vw;
+		}
 
-    #container.ps2retroscaler2x #canvas {
-      width: 113%;
-      height: 107%;
-      margin-left: -0.2%;
-    }
+		#container.snesanalogue {
+			aspect-ratio: 260 / 240;
+		}
 
-    #container.n64retroscaler2x {
-      aspect-ratio: 280 / 240;
-    }
+		#container.snesanalogue #canvas {
+			width: 118%;
+			height: 108%;
+			margin-top: 0%;
+			margin-left: 0.5%;
+		}
 
-    #container.n64retroscaler2x #canvas {
-      width: 104%;
-      height: 107%;
-    }
+		#container.ps1retroscaler2x,
+		#container.ps1gbs {
+			aspect-ratio: 280 / 240;
+		}
 
-    #crt-overlay {
-      display: none;
-      background: url(/crt.png) no-repeat center center;
-      background-size: 183.3% 200%;
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      border-radius: 50px;
-      box-shadow: inset 0 0 180px rgb(115 86 86 / 65%);
-      mix-blend-mode: hue;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      animation: flicker 0.15s infinite alternate;
-    }
+		#container.ps1retroscaler2x #canvas {
+			width: 113%;
+			height: 100%;
+			margin-left: -1.2%;
+		}
 
-    @keyframes flicker {
-      0%   { opacity: 0.4; }
-      100% { opacity: 0.35; }
-    }
-    #fps {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      font-size: 14px;
-      background: rgba(0,0,0,0.5);
-      padding: 5px;
-      z-index: 10;
-    }
-  </style>
+		#container.ps1gbs #canvas {
+			width: 148%;
+			height: 103.5%;
+			margin-left: -0.5%;
+			margin-top: -1.5%;
+		}
+
+		#container.ps2retroscaler2x {
+			aspect-ratio: 280 / 240;
+		}
+
+		#container.ps2retroscaler2x #canvas {
+			width: 113%;
+			height: 107%;
+			margin-left: -0.2%;
+		}
+
+		#container.n64retroscaler2x {
+			aspect-ratio: 280 / 240;
+		}
+
+		#container.n64retroscaler2x #canvas {
+			width: 104%;
+			height: 107%;
+		}
+
+		#crt-overlay {
+			display: none;
+			background: url(/crt.png) no-repeat center center;
+			background-size: 183.3% 200%;
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			border-radius: 50px;
+			box-shadow: inset 0 0 180px rgb(115 86 86 / 65%);
+			mix-blend-mode: hue;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			width: 100%;
+			height: 100%;
+			z-index: 2;
+			animation: flicker 0.15s infinite alternate;
+		}
+
+		@keyframes flicker {
+			0% {
+				opacity: 0.4;
+			}
+
+			100% {
+				opacity: 0.35;
+			}
+		}
+
+		#fps {
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			font-size: 14px;
+			background: rgba(0, 0, 0, 0.5);
+			padding: 5px;
+			z-index: 10;
+		}
+	</style>
 </head>
+
 <body>
+	<div id="menu">
+		<label>Camera:
+			<select id="cameraSelect"></select>
+		</label><br>
+		<label>Microphone:
+			<select id="micSelect"></select>
+		</label><br>
+		<label>Aspect Ratio:
+			<select id="ratio">
+				<option value="snesanalogue">Super Nintendo (Analogue 480p)</option>
+				<option value="n64retroscaler2x">Nintendo 64 (Retro Scaler 2x)</option>
+				<option value="ps1retroscaler2x">PS1 (Retro Scaler 2x)</option>
+				<option value="ps1gbs">PS1 (GBS-C)</option>
+				<option value="ps2retroscaler2x">PS2 (Retro Scaler 2x)</option>
+			</select>
+		</label><br>
+		<label>Filter:
+			<select id="filter">
+				<option value="original">Original</option>
+				<option value="crt">CRT</option>
+				<option value="sharpen">Sharpen3D</option>
+			</select>
+		</label><br>
+		<button id="startBtn">Start</button>
+	</div>
 
-<div id="menu">
-  <label>Camera:
-    <select id="cameraSelect"></select>
-  </label><br>
-  <label>Microphone:
-    <select id="micSelect"></select>
-  </label><br>
-  <label>Aspect Ratio:
-    <select id="ratio">
-      <option value="snesanalogue">Super Nintendo (Analogue 480p)</option>
-      <option value="n64retroscaler2x">Nintendo 64 (Retro Scaler 2x)</option>
-      <option value="ps1retroscaler2x">PS1 (Retro Scaler 2x)</option>
-      <option value="ps1gbs">PS1 (GBS-C)</option>
-      <option value="ps2retroscaler2x">PS2 (Retro Scaler 2x)</option>
-    </select>
-  </label><br>
-  <label>Filter:
-    <select id="filter">
-      <option value="original">Original</option>
-      <option value="crt">CRT</option>
-      <option value="sharpen">Sharpen3D</option>
-    </select>
-  </label><br>
-  <button id="startBtn">Start</button>
-</div>
+	<video id="video" autoplay playsinline muted style="display:none;"></video>
+	<audio id="audio" autoplay controls style="display:none;"></audio>
+	<div id="container">
+		<canvas id="canvas" width="2562" height="1440"></canvas>
+		<div id="crt-overlay"></div>
+	</div>
+	<div id="fps">FPS: 0</div>
 
-<video id="video" autoplay playsinline muted style="display:none;"></video>
-<audio id="audio" autoplay controls style="display:none;"></audio>
-<div id="container">
-  <canvas id="canvas" width="2562" height="1440"></canvas>
-  <div id="crt-overlay"></div>
-</div>
-<div id="fps">FPS: 0</div>
+	<script>
+		const cameraSelect = document.getElementById('cameraSelect');
+		const micSelect = document.getElementById('micSelect');
+		const aspect = document.getElementById('ratio');
+		const filter = document.getElementById('filter');
+		const startBtn = document.getElementById('startBtn');
+		const container = document.getElementById('container');
+		const menu = document.getElementById('menu');
+		const video = document.getElementById('video');
+		const audio = document.getElementById('audio');
+		const canvas = document.getElementById('canvas');
+		const fpsDisplay = document.getElementById('fps');
+		const overlay = document.getElementById('crt-overlay')
 
-<script>
-  const cameraSelect = document.getElementById('cameraSelect');
-  const micSelect = document.getElementById('micSelect');
-  const aspect = document.getElementById('ratio');
-  const filter = document.getElementById('filter');
-  const startBtn = document.getElementById('startBtn');
-  const container = document.getElementById('container');
-  const menu = document.getElementById('menu');
-  const video = document.getElementById('video');
-  const audio = document.getElementById('audio');
-  const canvas = document.getElementById('canvas');
-  const fpsDisplay = document.getElementById('fps');
-  const overlay = document.getElementById('crt-overlay')
+		let videoStream;
+		let audioStream;
+		let gl;
+		let program;
+		let positionBuffer;
+		let texCoordBuffer;
+		let texture;
+		let lastTime = performance.now();
+		let frames = 0;
 
-  let videoStream;
-  let audioStream;
-  let gl;
-  let program;
-  let positionBuffer;
-  let texCoordBuffer;
-  let texture;
-  let lastTime = performance.now();
-  let frames = 0;
+		let videoAspect;
 
-  let videoAspect;
-
-  const filters = {
-    original: `precision mediump float;
+		const filters = {
+			original: `precision mediump float;
 
       varying vec2 v_texCoord;
       uniform sampler2D u_texture;
@@ -221,7 +239,7 @@
         gl_FragColor = color;
       }
     `,
-    crt: `precision mediump float;
+			crt: `precision mediump float;
 
     varying vec2 v_texCoord;
     uniform sampler2D u_texture;
@@ -234,32 +252,28 @@
     const float horizontalIntensity = 0.3;   // Intensidade (0.0 a 1.0)
 
     void main() {
-      // Cada pixel da textura original vira um bloco 3x3
+      vec2 texelCoord = v_texCoord * u_textureSize;
+
+      // Índice inteiro do pixel base e posição local em 3x3
+      vec2 cellIndex = floor(texelCoord);
+      vec2 localPos = fract(texelCoord) * 3.0;
+
       vec2 cellSize = 1.0 / u_textureSize;
-
-      // Coordenada dentro do grid expandido (3x3 por pixel)
-      vec2 pos = v_texCoord * (u_textureSize * 3.0);
-      vec2 cellIndex = floor(pos / 3.0);
-      vec2 localPos = mod(pos, 3.0);
-
-      // Coordenada do centro do pixel original
       vec2 baseCoord = (cellIndex + 0.5) * cellSize;
 
-      // Sample central
+      // Sample central e vizinhos
       vec4 center = texture2D(u_texture, baseCoord);
-
-      // Vizinhos para blend
-      vec4 left = texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize);
-      vec4 right = texture2D(u_texture, (cellIndex + vec2(1.0, 0.0) + 0.5) * cellSize);
-      vec4 top = texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize);
-      vec4 bottom = texture2D(u_texture, (cellIndex + vec2(0.0, 1.0) + 0.5) * cellSize);
+      vec4 left   = texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize);
+      vec4 right  = texture2D(u_texture, (cellIndex + vec2( 1.0, 0.0) + 0.5) * cellSize);
+      vec4 top    = texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize);
+      vec4 bottom = texture2D(u_texture, (cellIndex + vec2(0.0,  1.0) + 0.5) * cellSize);
 
       // Blend horizontal
       vec4 horiz;
       if (localPos.x < 1.0) {
         horiz = mix(left, center, (localPos.x + 1.0) * 0.5);
-      } else if (localPos.x > 1.0) {
-        horiz = mix(center, right, (localPos.x - 1.0) * 0.5);
+      } else if (localPos.x > 2.0) {
+        horiz = mix(center, right, (localPos.x - 2.0) * 0.5);
       } else {
         horiz = center;
       }
@@ -268,14 +282,14 @@
       vec4 finalColor;
       if (localPos.y < 1.0) {
         finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.5);
-      } else if (localPos.y > 1.0) {
-        finalColor = mix(horiz, bottom, (localPos.y - 1.0) * 0.5);
+      } else if (localPos.y > 2.0) {
+        finalColor = mix(horiz, bottom, (localPos.y - 2.0) * 0.5);
       } else {
         finalColor = horiz;
       }
 
       // --- MÁSCARA RADIAL (efeito CRT fósforo) ---
-      vec2 radial = (localPos - 1.0) / 1.5;
+      vec2 radial = (localPos - 1.5) / 1.5;
       float dist = dot(radial, radial);
       float vignette = smoothstep(1.0, 0.0, dist);
       finalColor.rgb *= mix(0.8, 1.0, vignette);
@@ -289,9 +303,7 @@
 
       // --- SCANLINE HORIZONTAL ---
       if (enableHorizontalScanlines) {
-        // Converte texCoord para coordenada real da textura original
-        float y = v_texCoord.y * u_textureSize.y;
-
+        float y = texelCoord.y;
         float modY = mod(y, horizontalSpacing);
         if (modY < horizontalThickness) {
           finalColor.rgb *= (1.0 - horizontalIntensity);
@@ -300,7 +312,7 @@
 
       gl_FragColor = finalColor;
     }`,
-    sharpen: `precision mediump float;
+			sharpen: `precision mediump float;
 
     varying vec2 v_texCoord;
     uniform sampler2D u_texture;
@@ -334,13 +346,13 @@
 
       gl_FragColor = finalColor;
     }`
-  };
+		};
 
-  // Fragment shader (GLSL) - fsSource
-  let fsSource = null; 
+		// Fragment shader (GLSL) - fsSource
+		let fsSource = null;
 
-  // Vertex shader - vsSource
-  const vsSource = `
+		// Vertex shader - vsSource
+		const vsSource = `
     attribute vec4 a_position;
     attribute vec2 a_texCoord;
 
@@ -352,251 +364,252 @@
     }
   `;
 
-  function createShader(gl, type, source) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile failed:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-    return shader;
-  }
+		function createShader(gl, type, source) {
+			const shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+				console.error('Shader compile failed:', gl.getShaderInfoLog(shader));
+				gl.deleteShader(shader);
+				return null;
+			}
+			return shader;
+		}
 
-  function createProgram(gl, vsSource, fsSource) {
-    fsSource = filters[ filter.value ];
-    const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program link failed:', gl.getProgramInfoLog(program));
-      gl.deleteProgram(program);
-      return null;
-    }
-    return program;
-  }
+		function createProgram(gl, vsSource, fsSource) {
+			fsSource = filters[filter.value];
+			const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+			const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+			const program = gl.createProgram();
+			gl.attachShader(program, vertexShader);
+			gl.attachShader(program, fragmentShader);
+			gl.linkProgram(program);
+			if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+				console.error('Program link failed:', gl.getProgramInfoLog(program));
+				gl.deleteProgram(program);
+				return null;
+			}
+			return program;
+		}
 
-  async function requestPermissionsAndListDevices() {
-    try {
-      const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      await listDevices();
-      tempStream.getTracks().forEach(t => t.stop());
-    } catch (err) {
-      alert("Permission denied or error accessing media: " + err.message);
-      console.error(err);
-    }
-  }
+		async function requestPermissionsAndListDevices() {
+			try {
+				const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+				await listDevices();
+				tempStream.getTracks().forEach(t => t.stop());
+			} catch (err) {
+				alert("Permission denied or error accessing media: " + err.message);
+				console.error(err);
+			}
+		}
 
-  async function listDevices() {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    cameraSelect.innerHTML = '';
-    micSelect.innerHTML = '';
+		async function listDevices() {
+			const devices = await navigator.mediaDevices.enumerateDevices();
+			cameraSelect.innerHTML = '';
+			micSelect.innerHTML = '';
 
-    devices.forEach(device => {
-      const option = document.createElement('option');
-      option.value = device.deviceId;
-      option.text = device.label || `${device.kind}`;
-      if (device.kind === 'videoinput') {
-        cameraSelect.appendChild(option);
-      } else if (device.kind === 'audioinput') {
-        micSelect.appendChild(option);
-      }
-    });
-  }
+			devices.forEach(device => {
+				const option = document.createElement('option');
+				option.value = device.deviceId;
+				option.text = device.label || `${device.kind}`;
+				if (device.kind === 'videoinput') {
+					cameraSelect.appendChild(option);
+				} else if (device.kind === 'audioinput') {
+					micSelect.appendChild(option);
+				}
+			});
+		}
 
-  async function startStream() {
-    const videoSource = cameraSelect.value;
-    const audioSource = micSelect.value;
-    const ratio = aspect.value;
+		async function startStream() {
+			const videoSource = cameraSelect.value;
+			const audioSource = micSelect.value;
+			const ratio = aspect.value;
 
-    container.classList.add(ratio);
-    container.classList.add(filter.value);
-    
-    if ( filter.value.indexOf('crt') === 0 ) {
-      overlay.style.display = 'block';
-    }
-    
-    const videoConstraints = {
-      deviceId: videoSource ? { exact: videoSource } : undefined,
-      frameRate: { ideal: 60, max: 60 },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    };
+			container.classList.add(ratio);
+			container.classList.add(filter.value);
 
-    const audioConstraints = {
-      deviceId: audioSource ? { exact: audioSource } : undefined,
-      autoGainControl: false,
-      echoCancellation: false,
-      googAutoGainControl: false,
-      noiseSuppression: false
-    };
+			if (filter.value.indexOf('crt') === 0) {
+				overlay.style.display = 'block';
+			}
 
-    try {
-      if (videoStream) videoStream.getTracks().forEach(t => t.stop());
-      if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+			const videoConstraints = {
+				deviceId: videoSource ? { exact: videoSource } : undefined,
+				frameRate: { ideal: 60, max: 60 },
+				width: { ideal: 1920 },
+				height: { ideal: 1080 }
+			};
 
-      videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
-      audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+			const audioConstraints = {
+				deviceId: audioSource ? { exact: audioSource } : undefined,
+				autoGainControl: false,
+				echoCancellation: false,
+				googAutoGainControl: false,
+				noiseSuppression: false
+			};
 
-      video.srcObject = videoStream;
-      audio.srcObject = audioStream;
+			try {
+				if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+				if (audioStream) audioStream.getTracks().forEach(t => t.stop());
 
-      video.onloadedmetadata = () => {
-        video.play();
-        menu.style.display = 'none';
-        initWebGL();
-        startRenderLoop();
-      };
-    } catch (err) {
-      alert("Error starting media: " + err.message);
-      console.error(err);
-    }
-  }
+				videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+				audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
 
-  function initWebGL() {
-    gl = canvas.getContext('webgl');
-    if (!gl) {
-      alert('WebGL not supported');
-      return;
-    }
+				video.srcObject = videoStream;
+				audio.srcObject = audioStream;
 
-    program = createProgram(gl, vsSource, fsSource);
-    gl.useProgram(program);
+				video.onloadedmetadata = () => {
+					video.play();
+					menu.style.display = 'none';
+					initWebGL();
+					startRenderLoop();
+				};
+			} catch (err) {
+				alert("Error starting media: " + err.message);
+				console.error(err);
+			}
+		}
 
-    const positionLocation = gl.getAttribLocation(program, "a_position");
-    const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+		function initWebGL() {
+			gl = canvas.getContext('webgl');
+			if (!gl) {
+				alert('WebGL not supported');
+				return;
+			}
 
-    positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    setPositionFullScreen();
+			program = createProgram(gl, vsSource, fsSource);
+			gl.useProgram(program);
 
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+			const positionLocation = gl.getAttribLocation(program, "a_position");
+			const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
 
-    texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      0, 0,
-      1, 0,
-      0, 1,
-      0, 1,
-      1, 0,
-      1, 1,
-    ]), gl.STATIC_DRAW);
+			positionBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+			setPositionFullScreen();
 
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(positionLocation);
+			gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+			texCoordBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+				0, 0,
+				1, 0,
+				0, 1,
+				0, 1,
+				1, 0,
+				1, 1,
+			]), gl.STATIC_DRAW);
 
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+			gl.enableVertexAttribArray(texCoordLocation);
+			gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-    videoAspect = video.videoWidth / video.videoHeight;
+			texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, texture);
 
-    gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    window.addEventListener('resize', () => {
-      updatePositionsForAspectRatio();
-    });
+			videoAspect = video.videoWidth / video.videoHeight;
 
-    updatePositionsForAspectRatio();
-  }
+			gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 640.0, 360.0);
 
-  function setPositionFullScreen() {
-    const fullScreenCoords = new Float32Array([
-      -1,  1,
-       1,  1,
-      -1, -1,
-      -1, -1,
-       1,  1,
-       1, -1,
-    ]);
-    gl.bufferData(gl.ARRAY_BUFFER, fullScreenCoords, gl.STATIC_DRAW);
-  }
+			window.addEventListener('resize', () => {
+				updatePositionsForAspectRatio();
+			});
 
-  function updatePositionsForAspectRatio() {
-    if (!gl) return;
+			updatePositionsForAspectRatio();
+		}
 
-    // Atualizar os buffers de posição e coordenadas de textura
-    // para cobrir todo o canvas
-    const positions = new Float32Array([
-      -1,  1,
-      1,  1,
-      -1, -1,
-      -1, -1,
-      1,  1,
-      1, -1,
-    ]);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-  }
+		function setPositionFullScreen() {
+			const fullScreenCoords = new Float32Array([
+				-1, 1,
+				1, 1,
+				-1, -1,
+				-1, -1,
+				1, 1,
+				1, -1,
+			]);
+			gl.bufferData(gl.ARRAY_BUFFER, fullScreenCoords, gl.STATIC_DRAW);
+		}
 
-  function startRenderLoop() {
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = 854;
-    offCanvas.height = 480;
-    const ctx = offCanvas.getContext('2d');
+		function updatePositionsForAspectRatio() {
+			if (!gl) return;
 
-    ctx.imageSmoothingEnabled = false;
-    
-    function render(now) {
-      if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-        gl.viewport(0, 0, canvas.width, canvas.height);
+			// Atualizar os buffers de posição e coordenadas de textura
+			// para cobrir todo o canvas
+			const positions = new Float32Array([
+				-1, 1,
+				1, 1,
+				-1, -1,
+				-1, -1,
+				1, 1,
+				1, -1,
+			]);
+			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+		}
 
-        gl.bindTexture(gl.TEXTURE_2D, texture);
+		function startRenderLoop() {
+			const offCanvas = document.createElement('canvas');
+			offCanvas.width = 854;
+			offCanvas.height = 480;
+			const ctx = offCanvas.getContext('2d');
 
-        const videoWidth = video.videoWidth;
-        const videoHeight = video.videoHeight;
+			ctx.imageSmoothingEnabled = false;
 
-        ctx.drawImage(
-          video,             // vídeo fonte
-          0, 0, 1920, 1080,  // área completa do vídeo
-          0, 0, 854, 480     // área do canvas a desenhar (com escala)
-        );
+			function render(now) {
+				if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+					gl.viewport(0, 0, canvas.width, canvas.height);
 
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,
-          gl.RGBA,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          offCanvas
-        );
+					gl.bindTexture(gl.TEXTURE_2D, texture);
 
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+					const videoWidth = video.videoWidth;
+					const videoHeight = video.videoHeight;
 
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+					ctx.drawImage(
+						video,             // vídeo fonte
+						0, 0, 1920, 1080,  // área completa do vídeo
+						0, 0, 854, 480     // área do canvas a desenhar (com escala)
+					);
 
-        frames++;
-        const nowMs = performance.now();
-        if (nowMs - lastTime >= 1000) {
-          fpsDisplay.textContent = `FPS: ${frames}`;
-          frames = 0;
-          lastTime = nowMs;
-        }
-      }
+					gl.texImage2D(
+						gl.TEXTURE_2D,
+						0,
+						gl.RGBA,
+						gl.RGBA,
+						gl.UNSIGNED_BYTE,
+						offCanvas
+					);
 
-      requestAnimationFrame(render);
-    }
+					gl.clearColor(0, 0, 0, 1);
+					gl.clear(gl.COLOR_BUFFER_BIT);
 
-    requestAnimationFrame(render);
-  }
+					gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-  startBtn.onclick = () => {
-    startStream();
-  };
+					frames++;
+					const nowMs = performance.now();
+					if (nowMs - lastTime >= 1000) {
+						fpsDisplay.textContent = `FPS: ${frames}`;
+						frames = 0;
+						lastTime = nowMs;
+					}
+				}
 
-  requestPermissionsAndListDevices();
-</script>
+				requestAnimationFrame(render);
+			}
+
+			requestAnimationFrame(render);
+		}
+
+		startBtn.onclick = () => {
+			startStream();
+		};
+
+		requestPermissionsAndListDevices();
+	</script>
 
 </body>
+
 </html>
