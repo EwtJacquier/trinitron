@@ -189,6 +189,7 @@
 		<label>Filter:
 			<select id="filter">
 				<option value="original">Original</option>
+				<option value="downscale">Downscale</option>
 				<option value="crt">CRT</option>
 				<option value="sharpen">Sharpen3D</option>
 			</select>
@@ -541,7 +542,7 @@ void main() {
 
 			videoAspect = video.videoWidth / video.videoHeight;
 
-			gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), aspect.value === 'fullhd' ? 1920.0 : 640.0, aspect.value === 'fullhd' ? 1080.0 : 360.0);
+			gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920.0 : 640.0, filter.value === 'original' ? 1080.0 : 360.0);
 
 			window.addEventListener('resize', () => {
 				updatePositionsForAspectRatio();
@@ -587,7 +588,7 @@ void main() {
 
 			ctx.imageSmoothingEnabled = false;
 
-			if ( aspect.value === 'fullhd' ) {
+			if ( filter.value === 'original' ) {
 				canvas.width = 1920;
 				canvas.height = 1080;
 			}
@@ -601,7 +602,7 @@ void main() {
 					const videoWidth = video.videoWidth;
 					const videoHeight = video.videoHeight;
 
-					if ( aspect.value === 'fullhd' ) {
+					if ( filter.value === 'original' ) {
 						gl.texImage2D(
 							gl.TEXTURE_2D,
 							0,
