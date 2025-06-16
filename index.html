@@ -192,7 +192,7 @@
 		<label>Filter:
 			<select id="filter">
 				<option value="original">Original</option>
-				<option value="downscale">Downscale</option>
+				<!-- <option value="downscale">Downscale</option> -->
 				<option value="crt">CRT</option>
 				<option value="sharpen">Sharpen3D</option>
 			</select>
@@ -540,7 +540,7 @@ void main() {
 
 			videoAspect = video.videoWidth / video.videoHeight;
 
-			gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920.0 : 640.0, filter.value === 'original' ? 1080.0 : 360.0);
+			gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), 1920.0, 1080.0);
 
 			window.addEventListener('resize', () => {
 				updatePositionsForAspectRatio();
@@ -579,16 +579,12 @@ void main() {
 		}
 
 		function startRenderLoop() {
-			const offCanvas = document.createElement('canvas');
-			offCanvas.width = 854;
-			offCanvas.height = 480;
-			const ctx = offCanvas.getContext('2d');
-
-			ctx.imageSmoothingEnabled = false;
-
 			if ( filter.value === 'original' ) {
 				canvas.width = 1920;
 				canvas.height = 1080;
+			} else {
+				canvas.width = 1920 * 3;
+				canvas.height = 1080 * 3;
 			}
 
 			function render(now) {
@@ -600,33 +596,15 @@ void main() {
 					const videoWidth = video.videoWidth;
 					const videoHeight = video.videoHeight;
 
-					if ( filter.value === 'original' ) {
-						gl.texImage2D(
-							gl.TEXTURE_2D,
-							0,
-							gl.RGBA,
-							gl.RGBA,
-							gl.UNSIGNED_BYTE,
-							video
-						);
-					} else {
-						ctx.drawImage(
-							video,             // vídeo fonte
-							0, 0, 1920, 1080,  // área completa do vídeo
-							0, 0, 854, 480     // área do canvas a desenhar (com escala)
-						);
-
-						gl.texImage2D(
-							gl.TEXTURE_2D,
-							0,
-							gl.RGBA,
-							gl.RGBA,
-							gl.UNSIGNED_BYTE,
-							offCanvas
-						);
-					}
+					gl.texImage2D(
+						gl.TEXTURE_2D,
+						0,
+						gl.RGBA,
+						gl.RGBA,
+						gl.UNSIGNED_BYTE,
+						video
+					);
 					
-
 					gl.clearColor(0, 0, 0, 1);
 					gl.clear(gl.COLOR_BUFFER_BIT);
 
