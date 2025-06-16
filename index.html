@@ -94,8 +94,8 @@
 			height: 100%;
 		}
 
-		#container.fullhd #crt-overlay {
-			display: none;
+		#container.crt:not(.fullhd) #crt-overlay {
+			display: block;
 		}
 
 		#container.ps1retroscaler2x #canvas {
@@ -220,7 +220,6 @@
 		const audio = document.getElementById('audio');
 		const canvas = document.getElementById('canvas');
 		const fpsDisplay = document.getElementById('fps');
-		const overlay = document.getElementById('crt-overlay')
 
 		let videoStream;
 		let audioStream;
@@ -459,10 +458,6 @@ void main() {
 
 			container.classList.add(ratio);
 			container.classList.add(filter.value);
-
-			if (filter.value.indexOf('crt') === 0) {
-				overlay.style.display = 'block';
-			}
 
 			const videoConstraints = {
 				deviceId: videoSource ? { exact: videoSource } : undefined,
