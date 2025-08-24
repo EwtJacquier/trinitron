@@ -166,8 +166,8 @@
 				<option value="downscale">Downscale (480p)</option>
 				<option value="crt">CRT Blend (480p -> 1080p)</option>
 				<option value="crtgrainy">CRT Blend + Grainy (480p -> 1080p)</option>
-				<option value="sharpen">Sharpen (480p -> 1080p)</option>
-				<option value="grainy">Sharpen + Grainy (480p -> 1080p)</option>
+				<option value="sharpen">Sharpen 3D (480p -> 1080p)</option>
+				<option value="grainy">Sharpen 3D + Grainy (480p -> 1080p)</option>
 			</select>
 		</label><br>
 		<button id="startBtn">Start</button>
@@ -352,20 +352,17 @@ void main() {
         finalColor = horiz;
     }
 
-    // Vignette
     vec2 radial = (localPos - 1.5) / 1.5;
     float dist = dot(radial, radial);
     float vignette = smoothstep(1.0, 0.0, dist);
     finalColor.rgb *= mix(0.8, 1.0, vignette);
 
-    // Chroma offset
     float chromaOffset = 0.003;
     vec4 colorR = texture2D(u_texture, baseCoord + vec2(chromaOffset, 0.0));
     vec4 colorB = texture2D(u_texture, baseCoord - vec2(chromaOffset, 0.0));
     finalColor.r = mix(finalColor.r, colorR.r, 0.15);
     finalColor.b = mix(finalColor.b, colorB.b, 0.15);
 
-    // Scanlines
     if (enableHorizontalScanlines) {
         float y = texelCoord.y;
         float modY = mod(y, horizontalSpacing);
@@ -374,7 +371,6 @@ void main() {
         }
     }
 
-    // === GRAIN PASS ===
     float grainAmount = 0.09; // intensidade do ruído
     float noise = random(v_texCoord * u_textureSize + vec2(u_time * 60.0, u_time * 120.0)) - 0.5;
     finalColor.rgb += noise * grainAmount;
