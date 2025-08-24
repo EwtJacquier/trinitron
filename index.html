@@ -25,7 +25,7 @@
 			height: 100%;
 		}
 
-		.crt #canvas {
+		.crt #canvas, .crtsharpen {
 			filter: brightness(1.4) saturate(1.3);
 		}
 
@@ -88,7 +88,7 @@
 			height: 100%;
 		}
 
-		#container.crt:not(.fullhd) #crt-overlay {
+		#container.crt:not(.fullhd) #crt-overlay, #container.crtsharpen:not(.fullhd) #crt-overlay {
 			display: block;
 		}
 
@@ -164,6 +164,7 @@
 				<option value="original">Original (Passthrough)</option>
 				<option value="downscale">Downscale (480p)</option>
 				<option value="crt">CRT Blend (480p -> 1080p)</option>
+				<option value="crtsharpen">CRT Blend + Sharpen (480p -> 1080p)</option>
 				<option value="sharpen">Sharpen (480p -> 1080p)</option>
 				<option value="grainy">Sharpen + Grainy (480p -> 1080p)</option>
 			</select>
@@ -300,6 +301,66 @@ void main() {
 
       gl_FragColor = finalColor;
     }`,
+	crtsharpen: `precision mediump float;
+
+varying vec2 v_texCoord;
+uniform sampler2D u_texture;
+uniform vec2 u_textureSize;
+
+const bool enableHorizontalScanlines = true;
+const float horizontalThickness = 0.5;   // Espessura da linha escura
+const float horizontalIntensity = 0.3;   // Intensidade (0.0 a 1.0)
+
+// Função para gerar ruído pseudo-aleatório (opcional)
+float random(vec2 co) {
+    return fract(sin(dot(co, vec2(12.9898,78.233))) * 43758.5453);
+}
+
+void main() {
+    vec2 texelCoord = v_texCoord * u_textureSize * 3.0; // 3x upscale
+    vec2 cellIndex = floor(texelCoord / 3.0);
+    vec2 localPos = mod(texelCoord, 3.0); // posição dentro do bloco 3x3
+    vec2 cellSize = 1.0 / u_textureSize;
+    vec2 baseCoord = (cellIndex + 0.5) * cellSize;
+
+    vec2 pixel = 1.0 / u_textureSize;
+    vec4 center = texture2D(u_texture, baseCoord);
+    vec4 up     = texture2D(u_texture, baseCoord + vec2(0.0, -pixel.y));
+    vec4 down   = texture2D(u_texture, baseCoord + vec2(0.0,  pixel.y));
+    vec4 left   = texture2D(u_texture, baseCoord + vec2(-pixel.x, 0.0));
+    vec4 right  = texture2D(u_texture, baseCoord + vec2( pixel.x, 0.0));
+
+    vec4 sharpened = center * 1.5 - (up + down + left + right) * 0.125;
+    sharpened = clamp(sharpened, 0.0, 1.0);
+
+    float contrast = length(center.rgb - 0.25 * (up.rgb + down.rgb + left.rgb + right.rgb));
+    vec4 smoothColor = 0.25 * (left + right + up + down);
+    float edgeThreshold = 0.1;
+    float blendFactor = smoothstep(edgeThreshold, 0.5, contrast);
+    vec4 finalColor = mix(sharpened, smoothColor, blendFactor);
+
+    if (enableHorizontalScanlines) {
+        float scale = 3.0; // upscale 3x
+        float thickness = horizontalThickness * scale;
+        float yMod = mod(texelCoord.y, scale);
+        if (yMod < thickness) {
+            finalColor.rgb *= (1.0 - horizontalIntensity);
+        }
+    }
+
+    vec2 radial = (localPos - 1.5) / 1.5;
+    float dist = dot(radial, radial);
+    float vignette = smoothstep(1.0, 0.0, dist);
+    finalColor.rgb *= mix(0.8, 1.0, vignette);
+
+    float chromaOffset = 0.003;
+    vec4 colorR = texture2D(u_texture, baseCoord + vec2(chromaOffset, 0.0));
+    vec4 colorB = texture2D(u_texture, baseCoord - vec2(chromaOffset, 0.0));
+    finalColor.r = mix(finalColor.r, colorR.r, 0.15);
+    finalColor.b = mix(finalColor.b, colorB.b, 0.15);
+
+    gl_FragColor = clamp(finalColor, 0.0, 1.0);
+}`,
 			sharpen: `precision mediump float;
 
     varying vec2 v_texCoord;
