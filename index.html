@@ -343,18 +343,15 @@ float random(vec2 co) {
 void main() {
   vec2 pixel = 1.0 / u_textureSize;
 
-  vec2 upscaleCoord = floor(v_texCoord * u_textureSize * 3.0) / (u_textureSize * 3.0);
-  vec2 baseCoord = upscaleCoord;
-
-  vec4 center = texture2D(u_texture, baseCoord);
-  vec4 up     = texture2D(u_texture, baseCoord + vec2(0.0, -pixel.y));
-  vec4 down   = texture2D(u_texture, baseCoord + vec2(0.0,  pixel.y));
-  vec4 left   = texture2D(u_texture, baseCoord + vec2(-pixel.x, 0.0));
-  vec4 right  = texture2D(u_texture, baseCoord + vec2( pixel.x, 0.0));
-  vec4 upLeft = texture2D(u_texture, baseCoord + vec2(-pixel.x, -pixel.y));
-  vec4 upRight= texture2D(u_texture, baseCoord + vec2( pixel.x, -pixel.y));
-  vec4 downLeft=texture2D(u_texture, baseCoord + vec2(-pixel.x,  pixel.y));
-  vec4 downRight=texture2D(u_texture, baseCoord + vec2( pixel.x,  pixel.y));
+  vec4 center = texture2D(u_texture, v_texCoord);
+  vec4 up     = texture2D(u_texture, v_texCoord + vec2(0.0, -pixel.y));
+  vec4 down   = texture2D(u_texture, v_texCoord + vec2(0.0,  pixel.y));
+  vec4 left   = texture2D(u_texture, v_texCoord + vec2(-pixel.x, 0.0));
+  vec4 right  = texture2D(u_texture, v_texCoord + vec2( pixel.x, 0.0));
+  vec4 upLeft = texture2D(u_texture, v_texCoord + vec2(-pixel.x, -pixel.y));
+  vec4 upRight= texture2D(u_texture, v_texCoord + vec2( pixel.x, -pixel.y));
+  vec4 downLeft=texture2D(u_texture, v_texCoord + vec2(-pixel.x,  pixel.y));
+  vec4 downRight=texture2D(u_texture, v_texCoord + vec2( pixel.x,  pixel.y));
 
   vec4 sharpened = (9.0 * center - (up + down + left + right + upLeft + upRight + downLeft + downRight)) / 5.0;
   sharpened = mix(center, sharpened, 0.6);
