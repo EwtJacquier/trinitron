@@ -212,7 +212,6 @@ uniform sampler2D u_texture;
 uniform vec2 u_textureSize;
 
 void main() {
-  // Apenas amostra diretamente a cor da textura
   vec4 color = texture2D(u_texture, v_texCoord);
   gl_FragColor = color;
 }`,
@@ -223,19 +222,14 @@ void main() {
       uniform vec2 u_textureSize;
 
       void main() {
-        // Tamanho do bloco de 3x3 em coordenadas de textura
         vec2 cellSize = 1.0 / u_textureSize;
-        
-        // Multiplica por 3 para "ampliar" cada pixel
+
         vec2 pos = v_texCoord * (u_textureSize * 3.0);
-        
-        // Descobre o índice do pixel original
+
         vec2 cellIndex = floor(pos / 3.0);
 
-        // Converte o índice de volta para coordenadas da textura
         vec2 baseCoord = (cellIndex + 0.5) * cellSize;
 
-        // Obtém a cor do pixel original
         vec4 color = texture2D(u_texture, baseCoord);
 
         gl_FragColor = color;
@@ -247,7 +241,6 @@ void main() {
     uniform sampler2D u_texture;
     uniform vec2 u_textureSize;
 
-    // --- SCANLINE CONFIG ---
     const bool enableHorizontalScanlines = true;
     const float horizontalSpacing = 1.0;     // Espaçamento em pixels da textura original
     const float horizontalThickness = 0.5;   // Espessura da linha escura
@@ -256,21 +249,18 @@ void main() {
     void main() {
       vec2 texelCoord = v_texCoord * u_textureSize;
 
-      // Índice inteiro do pixel base e posição local em 3x3
       vec2 cellIndex = floor(texelCoord);
       vec2 localPos = fract(texelCoord) * 3.0;
 
       vec2 cellSize = 1.0 / u_textureSize;
       vec2 baseCoord = (cellIndex + 0.5) * cellSize;
 
-      // Sample central e vizinhos
       vec4 center = texture2D(u_texture, baseCoord);
       vec4 left   = texture2D(u_texture, (cellIndex + vec2(-1.0, 0.0) + 0.5) * cellSize);
       vec4 right  = texture2D(u_texture, (cellIndex + vec2( 1.0, 0.0) + 0.5) * cellSize);
       vec4 top    = texture2D(u_texture, (cellIndex + vec2(0.0, -1.0) + 0.5) * cellSize);
       vec4 bottom = texture2D(u_texture, (cellIndex + vec2(0.0,  1.0) + 0.5) * cellSize);
 
-      // Blend horizontal
       vec4 horiz;
       if (localPos.x < 1.0) {
         horiz = mix(left, center, (localPos.x + 1.0) * 0.5);
@@ -280,7 +270,6 @@ void main() {
         horiz = center;
       }
 
-      // Blend vertical
       vec4 finalColor;
       if (localPos.y < 1.0) {
         finalColor = mix(top, horiz, (localPos.y + 1.0) * 0.5);
@@ -290,20 +279,17 @@ void main() {
         finalColor = horiz;
       }
 
-      // --- MÁSCARA RADIAL (efeito CRT fósforo) ---
       vec2 radial = (localPos - 1.5) / 1.5;
       float dist = dot(radial, radial);
       float vignette = smoothstep(1.0, 0.0, dist);
       finalColor.rgb *= mix(0.8, 1.0, vignette);
 
-      // --- ABERRAÇÃO CROMÁTICA ---
       float chromaOffset = 0.003;
       vec4 colorR = texture2D(u_texture, baseCoord + vec2(chromaOffset, 0.0));
       vec4 colorB = texture2D(u_texture, baseCoord - vec2(chromaOffset, 0.0));
       finalColor.r = mix(finalColor.r, colorR.r, 0.15);
       finalColor.b = mix(finalColor.b, colorB.b, 0.15);
 
-      // --- SCANLINE HORIZONTAL ---
       if (enableHorizontalScanlines) {
         float y = texelCoord.y;
         float modY = mod(y, horizontalSpacing);
@@ -323,7 +309,6 @@ void main() {
     void main() {
       vec2 pixel = 1.0 / u_textureSize;
 
-      // === SHARPEN PASS ===
       vec4 center = texture2D(u_texture, v_texCoord);
       vec4 up     = texture2D(u_texture, v_texCoord + vec2(0.0, -pixel.y));
       vec4 down   = texture2D(u_texture, v_texCoord + vec2(0.0,  pixel.y));
@@ -334,13 +319,10 @@ void main() {
       vec4 sharpened = mix(center, rawSharpen, 0.5); // ajuste fino da nitidez
       sharpened = clamp(sharpened, 0.0, 1.0);
 
-      // === EDGE DETECTION for Anti-Aliasing ===
       float contrast = length(center.rgb - 0.25 * (up.rgb + down.rgb + left.rgb + right.rgb));
 
-      // === SMOOTHING PASS (antialias) ===
       vec4 smoothColor = 0.25 * (left + right + up + down);
 
-      // Mix entre sharpened e suavizado, baseado no contraste
       float edgeThreshold = 0.1;
       float blendFactor = smoothstep(edgeThreshold, 0.5, contrast);
 
@@ -361,12 +343,9 @@ float random(vec2 co) {
 void main() {
   vec2 pixel = 1.0 / u_textureSize;
 
-  // === UPSCALE 3x ===
-  // Multiplicamos por 3 e "snap" para coordenadas 1/3
   vec2 upscaleCoord = floor(v_texCoord * u_textureSize * 3.0) / (u_textureSize * 3.0);
   vec2 baseCoord = upscaleCoord;
 
-  // === SHARPEN PASS (kernel forte) ===
   vec4 center = texture2D(u_texture, baseCoord);
   vec4 up     = texture2D(u_texture, baseCoord + vec2(0.0, -pixel.y));
   vec4 down   = texture2D(u_texture, baseCoord + vec2(0.0,  pixel.y));
@@ -381,13 +360,11 @@ void main() {
   sharpened = mix(center, sharpened, 0.6);
   sharpened = clamp(sharpened, 0.0, 1.0);
 
-  // === GRAIN PASS (leve ruído) ===
   float grainAmount = 0.02;
   float noise = random(gl_FragCoord.xy) - 0.5;
   vec4 grainy = sharpened + vec4(vec3(noise * grainAmount), 0.0);
 
-  // === BRIGHTNESS CORRECTION ===
-  float brightnessFactor = 2.0; // ajuste fino para manter a luminância
+  float brightnessFactor = 2.0;
   vec4 corrected = grainy * brightnessFactor;
 
   gl_FragColor = clamp(corrected, 0.0, 1.0);
