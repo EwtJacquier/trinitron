@@ -1,6 +1,6 @@
-precision mediump float;
+precision highp float;
 
-varying vec2 v_texCoord;
+varying highp vec2 v_texCoord;
 uniform sampler2D u_texture;
 uniform vec2 u_textureSize;
 

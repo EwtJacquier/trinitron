@@ -18,7 +18,7 @@ body {
 	height: 100%;
 }
 
-.crt #canvas, .crtgrainy #canvas, .blurrycrt #canvas, .blurrygrainycrt #canvas {
+.crt #canvas, .crtgrainy #canvas, .blurrycrt #canvas, .blurrycrt2 #canvas, .blurrygrainycrt #canvas {
 	filter: brightness(1.4) saturate(1.3);
 }
 

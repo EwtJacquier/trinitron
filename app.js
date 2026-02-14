@@ -43,6 +43,7 @@ async function loadAllShaders() {
 		'crt',
 		'crtgrainy',
 		'blurrycrt',
+		'blurrycrt2',
 		'blurrygrainycrt',
 		'sharpen',
 		'grainy'
@@ -203,6 +204,7 @@ function initWebGL() {
 	videoAspect = video.videoWidth / video.videoHeight;
 
 	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920.0 : 640.0, filter.value === 'original' ? 1080.0 : 360.0);
+	gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
 
 	window.addEventListener('resize', () => {
 		updatePositionsForAspectRatio();
