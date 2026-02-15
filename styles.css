@@ -71,7 +71,7 @@ button {
 }
 
 #container.ps1retroscaler2x {
-	aspect-ratio: 280 / 240;
+	aspect-ratio: 320 / 240;
 }
 
 #container.fullhd {
@@ -82,11 +82,11 @@ button {
 }
 
 #container.ps2retroscaler2x {
-	aspect-ratio: 280 / 240;
+	aspect-ratio: 320 / 240;
 }
 
 #container.n64retroscaler2x {
-	aspect-ratio: 280 / 240;
+	aspect-ratio: 320 / 240;
 }
 
 @keyframes flicker {

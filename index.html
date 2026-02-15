@@ -4,7 +4,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<title>CRT Webcam Viewer</title>
-	<link rel="stylesheet" href="styles.css" />
+	<link rel="stylesheet" href="styles.css?v=1" />
 </head>
 
 <body>
@@ -31,7 +31,6 @@
 				<option value="crt">CRT Blend (480p -> 1080p)</option>
 				<option value="crtgrainy">CRT Blend + Grainy (480p -> 1080p)</option>
 				<option value="blurrycrt">CRT Blend + Blurry (480p -> 1080p)</option>
-				<option value="blurrycrt2">CRT Tubo Real (480p -> 1080p)</option>
 				<option value="blurrygrainycrt">CRT Blend + Blurry + Grainy (480p -> 1080p)</option>
 				<option value="sharpen">Sharpen 3D (480p -> 1080p)</option>
 				<option value="grainy">Sharpen 3D + Grainy (480p -> 1080p)</option>
