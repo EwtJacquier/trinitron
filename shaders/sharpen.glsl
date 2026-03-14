@@ -24,7 +24,7 @@ void main() {
   float edgeThreshold = 0.1;
   float blendFactor = smoothstep(edgeThreshold, 0.5, contrast);
 
-  vec4 finalColor = mix(sharpened, smoothColor, blendFactor);
+  vec4 finalColor = mix(sharpened, center, blendFactor);
 
   gl_FragColor = finalColor;
 }

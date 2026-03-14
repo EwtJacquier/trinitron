@@ -123,6 +123,7 @@ button {
 	cursor: pointer;
 	font-size: 18px;
 	border-radius: 4px;
+	width: 44px;
 }
 
 #sidebarToggle:hover {

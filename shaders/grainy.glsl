@@ -29,7 +29,7 @@ void main() {
 
     float edgeThreshold = 0.1;
     float blendFactor = smoothstep(edgeThreshold, 0.5, contrast);
-    vec4 finalColor = mix(sharpened, smoothColor, blendFactor);
+    vec4 finalColor = mix(sharpened, center, blendFactor);
 
     float grainAmount = 0.09; // intensidade do ruído
     float noise = random(v_texCoord * u_textureSize + vec2(u_time * 60.0, u_time * 120.0)) - 0.5;
