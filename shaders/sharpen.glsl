@@ -14,17 +14,12 @@ void main() {
   vec4 right  = texture2D(u_texture, v_texCoord + vec2( pixel.x, 0.0));
 
   vec4 rawSharpen = (5.0 * center) - up - down - left - right;
-  vec4 sharpened = mix(center, rawSharpen, 0.5); // ajuste fino da nitidez
-  sharpened = clamp(sharpened, 0.0, 1.0);
+  vec4 sharpened = mix(center, rawSharpen, 0.5);
 
-  float contrast = length(center.rgb - 0.25 * (up.rgb + down.rgb + left.rgb + right.rgb));
+  // Limita ao intervalo local para evitar halos e cores novas nas bordas
+  vec4 minColor = min(center, min(up, min(down, min(left, right))));
+  vec4 maxColor = max(center, max(up, max(down, max(left, right))));
+  sharpened = clamp(sharpened, minColor, maxColor);
 
-  vec4 smoothColor = 0.25 * (left + right + up + down);
-
-  float edgeThreshold = 0.1;
-  float blendFactor = smoothstep(edgeThreshold, 0.5, contrast);
-
-  vec4 finalColor = mix(sharpened, center, blendFactor);
-
-  gl_FragColor = finalColor;
+  gl_FragColor = sharpened;
 }
