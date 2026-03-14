@@ -5,6 +5,9 @@ const filter = document.getElementById('filter');
 const startBtn = document.getElementById('startBtn');
 const container = document.getElementById('container');
 const menu = document.getElementById('menu');
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const volumeSlider = document.getElementById('volume');
 const video = document.getElementById('video');
 const audio = document.getElementById('audio');
 const canvas = document.getElementById('canvas');
@@ -86,6 +89,30 @@ function createProgram(gl, vsSource, fsSource) {
 	return program;
 }
 
+function recompileProgram() {
+	if (!gl) return;
+	if (program) gl.deleteProgram(program);
+
+	program = createProgram(gl, vsSource, null);
+	gl.useProgram(program);
+
+	const positionLocation = gl.getAttribLocation(program, "a_position");
+	const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+	gl.enableVertexAttribArray(positionLocation);
+	gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+	gl.enableVertexAttribArray(texCoordLocation);
+	gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+
+	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920.0 : 640.0, filter.value === 'original' ? 1080.0 : 360.0);
+	gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
+
+	updatePositionsForAspectRatio();
+}
+
 async function requestPermissionsAndListDevices() {
 	try {
 		const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -150,6 +177,9 @@ async function startStream() {
 		video.onloadedmetadata = () => {
 			video.play();
 			menu.style.display = 'none';
+			sidebar.style.display = 'block';
+			sidebarToggle.style.display = 'block';
+			fpsDisplay.style.display = 'block';
 			initWebGL();
 			startRenderLoop();
 		};
@@ -166,18 +196,9 @@ function initWebGL() {
 		return;
 	}
 
-	program = createProgram(gl, vsSource, null);
-	gl.useProgram(program);
-
-	const positionLocation = gl.getAttribLocation(program, "a_position");
-	const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
-
 	positionBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 	setPositionFullScreen();
-
-	gl.enableVertexAttribArray(positionLocation);
-	gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
 	texCoordBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
@@ -190,9 +211,6 @@ function initWebGL() {
 		1, 1,
 	]), gl.STATIC_DRAW);
 
-	gl.enableVertexAttribArray(texCoordLocation);
-	gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-
 	texture = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, texture);
 
@@ -203,14 +221,11 @@ function initWebGL() {
 
 	videoAspect = video.videoWidth / video.videoHeight;
 
-	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920.0 : 640.0, filter.value === 'original' ? 1080.0 : 360.0);
-	gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
-
 	window.addEventListener('resize', () => {
 		updatePositionsForAspectRatio();
 	});
 
-	updatePositionsForAspectRatio();
+	recompileProgram();
 }
 
 function setPositionFullScreen() {
@@ -314,6 +329,25 @@ function startRenderLoop() {
 startBtn.onclick = () => {
 	startStream();
 };
+
+sidebarToggle.addEventListener('click', () => {
+	sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
+});
+
+filter.addEventListener('change', () => {
+	['original', 'downscale', 'crt', 'crtgrainy', 'blurrycrt', 'blurrycrt2', 'blurrygrainycrt', 'sharpen', 'grainy'].forEach(c => container.classList.remove(c));
+	container.classList.add(filter.value);
+	recompileProgram();
+});
+
+aspect.addEventListener('change', () => {
+	['fullhd', 'snesanalogue', 'n64retroscaler2x', 'ps1retroscaler2x', 'ps2retroscaler2x'].forEach(c => container.classList.remove(c));
+	container.classList.add(aspect.value);
+});
+
+volumeSlider.addEventListener('input', () => {
+	audio.volume = parseFloat(volumeSlider.value);
+});
 
 // Initialize: Load shaders first, then request permissions
 loadAllShaders().then(() => {

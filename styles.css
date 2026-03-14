@@ -64,6 +64,7 @@ button {
 	overflow: hidden;
 	position: absolute;
 	max-height: 100%;
+	cursor: none;
 }
 
 #container.snesanalogue {
@@ -102,10 +103,55 @@ button {
 #fps {
 	position: absolute;
 	top: 10px;
-	right: 10px;
+	left: 10px;
 	font-size: 14px;
 	background: rgba(0, 0, 0, 0.5);
 	padding: 5px;
 	z-index: 10;
 	display: none;
+}
+
+#sidebarToggle {
+	position: fixed;
+	right: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	z-index: 21;
+	background: rgba(0, 0, 0, 0.7);
+	color: white;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-right: none;
+	padding: 10px 8px;
+	cursor: pointer;
+	font-size: 18px;
+	border-radius: 4px 0 0 4px;
+}
+
+#sidebarToggle:hover {
+	background: rgba(40, 40, 40, 0.9);
+}
+
+#sidebar {
+	position: fixed;
+	right: 0;
+	top: 0;
+	height: 100%;
+	width: 220px;
+	background: rgba(0, 0, 0, 0.85);
+	z-index: 20;
+	padding: 15px;
+	box-sizing: border-box;
+	overflow-y: auto;
+}
+
+#sidebar label {
+	display: block;
+	margin-bottom: 12px;
+	font-size: 14px;
+}
+
+#sidebar select,
+#sidebar input[type="range"] {
+	width: 100%;
+	margin-top: 4px;
 }
