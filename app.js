@@ -11,7 +11,6 @@ const volumeSlider = document.getElementById('volume');
 const video = document.getElementById('video');
 const audio = document.getElementById('audio');
 const canvas = document.getElementById('canvas');
-const fpsDisplay = document.getElementById('fps');
 
 let videoStream;
 let audioStream;
@@ -20,9 +19,6 @@ let program;
 let positionBuffer;
 let texCoordBuffer;
 let texture;
-let lastTime = performance.now();
-let frames = 0;
-
 let videoAspect;
 
 // Object to store loaded shaders
@@ -107,7 +103,7 @@ function recompileProgram() {
 	gl.enableVertexAttribArray(texCoordLocation);
 	gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920.0 : 640.0, filter.value === 'original' ? 1080.0 : 360.0);
+	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 2562.0 : 640.0, filter.value === 'original' ? 1440.0 : 360.0);
 	gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
 
 	updatePositionsForAspectRatio();
@@ -179,7 +175,6 @@ async function startStream() {
 			menu.style.display = 'none';
 			sidebar.style.display = 'block';
 			sidebarToggle.style.display = 'block';
-			fpsDisplay.style.display = 'block';
 			initWebGL();
 			startRenderLoop();
 		};
@@ -266,8 +261,8 @@ function startRenderLoop() {
 	ctx.imageSmoothingEnabled = false;
 
 	if ( filter.value === 'original' ) {
-		canvas.width = 1920;
-		canvas.height = 1080;
+		canvas.width = 2562;
+		canvas.height = 1440;
 	}
 
 	function render(now) {
@@ -310,14 +305,6 @@ function startRenderLoop() {
 			gl.clear(gl.COLOR_BUFFER_BIT);
 
 			gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-			frames++;
-			const nowMs = performance.now();
-			if (nowMs - lastTime >= 1000) {
-				fpsDisplay.textContent = `FPS: ${frames}`;
-				frames = 0;
-				lastTime = nowMs;
-			}
 		}
 
 		requestAnimationFrame(render);
