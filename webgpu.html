@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="UTF-8" />
-	<title>CRT Webcam Viewer</title>
+	<title>CRT Webcam Viewer (WebGPU)</title>
 	<link rel="stylesheet" href="styles.css?v=1" />
 </head>
 
@@ -15,6 +15,11 @@
 		<label>Microphone:
 			<select id="micSelect"></select>
 		</label><br>
+		<button id="startBtn">Start</button>
+	</div>
+
+	<button id="sidebarToggle" style="display:none;">&#9776;</button>
+	<div id="sidebar" style="display:none;">
 		<label>Console:
 			<select id="ratio">
 				<option value="fullhd">Full HD</option>
@@ -28,15 +33,17 @@
 			<select id="filter">
 				<option value="original">Original (Passthrough)</option>
 				<option value="downscale">Downscale (480p)</option>
-				<option value="crt">CRT Blend (480p -> 1080p)</option>
-				<option value="crtgrainy">CRT Blend + Grainy (480p -> 1080p)</option>
-				<option value="blurrycrt">CRT Blend + Blurry (480p -> 1080p)</option>
-				<option value="blurrygrainycrt">CRT Blend + Blurry + Grainy (480p -> 1080p)</option>
-				<option value="sharpen">Sharpen 3D (480p -> 1080p)</option>
-				<option value="grainy">Sharpen 3D + Grainy (480p -> 1080p)</option>
+				<option value="crt">CRT Blend (480p -&gt; 1080p)</option>
+				<option value="crtgrainy">CRT Blend + Grainy (480p -&gt; 1080p)</option>
+				<option value="blurrycrt">CRT Blend + Blurry (480p -&gt; 1080p)</option>
+				<option value="blurrygrainycrt">CRT Blend + Blurry + Grainy (480p -&gt; 1080p)</option>
+				<option value="sharpen">Sharpen 3D (480p -&gt; 1080p)</option>
+				<option value="grainy">Sharpen 3D + Grainy (480p -&gt; 1080p)</option>
 			</select>
 		</label><br>
-		<button id="startBtn">Start</button>
+		<label>Volume:
+			<input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+		</label>
 	</div>
 
 	<video id="video" autoplay playsinline muted style="display:none;"></video>
@@ -46,7 +53,7 @@
 	</div>
 	<div id="fps">FPS: 0</div>
 
-	<script src="app.js"></script>
+	<script src="webgpu-app.js"></script>
 
 </body>
 
