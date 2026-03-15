@@ -24,6 +24,7 @@ let vertexBuffer, texCoordBuffer;
 let gpuTexture, sampler;
 let uniformBuffer;
 let bindGroup;
+let bindGroupLayout, pipelineLayout;
 
 // Track current texture dimensions to detect changes
 let currentTexWidth = 0;
@@ -206,6 +207,28 @@ async function initWebGPU() {
 		magFilter: 'linear',
 	});
 
+	// Explicit bind group layout — always has all 3 bindings regardless of shader usage
+	bindGroupLayout = gpuDevice.createBindGroupLayout({
+		entries: [
+			{
+				binding: 0,
+				visibility: GPUShaderStage.FRAGMENT,
+				texture: { sampleType: 'float' },
+			},
+			{
+				binding: 1,
+				visibility: GPUShaderStage.FRAGMENT,
+				sampler: { type: 'filtering' },
+			},
+			{
+				binding: 2,
+				visibility: GPUShaderStage.FRAGMENT,
+				buffer: { type: 'uniform' },
+			},
+		],
+	});
+	pipelineLayout = gpuDevice.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
 	await recompilePipeline();
 
 	window.addEventListener('resize', () => {
@@ -226,7 +249,7 @@ async function recompilePipeline() {
 	const shaderModule = gpuDevice.createShaderModule({ code: shaderCode });
 
 	pipeline = gpuDevice.createRenderPipeline({
-		layout: 'auto',
+		layout: pipelineLayout,
 		vertex: {
 			module: shaderModule,
 			entryPoint: 'vs_main',
@@ -278,7 +301,7 @@ function createGpuTexture(width, height) {
 function rebuildBindGroup() {
 	if (!pipeline || !gpuTexture) return;
 	bindGroup = gpuDevice.createBindGroup({
-		layout: pipeline.getBindGroupLayout(0),
+		layout: bindGroupLayout,
 		entries: [
 			{ binding: 0, resource: gpuTexture.createView() },
 			{ binding: 1, resource: sampler },
