@@ -30,6 +30,9 @@ let bindGroupLayout, pipelineLayout;
 let currentTexWidth = 0;
 let currentTexHeight = 0;
 
+// Render loop handle
+let animFrameId = null;
+
 // Shader sources
 const shaders = {};
 let vsSource = null;
@@ -144,6 +147,15 @@ async function initWebGPU() {
 		alert('WebGPU not supported in this browser.');
 		return;
 	}
+
+	// Cancel any running render loop before reinitializing to prevent device mismatch
+	if (animFrameId !== null) {
+		cancelAnimationFrame(animFrameId);
+		animFrameId = null;
+	}
+	if (gpuTexture) { gpuTexture.destroy(); gpuTexture = null; }
+	currentTexWidth = 0;
+	currentTexHeight = 0;
 
 	const adapter = await navigator.gpu.requestAdapter();
 	if (!adapter) {
@@ -311,31 +323,27 @@ function rebuildBindGroup() {
 }
 
 function startRenderLoop() {
-	const offCanvas = document.createElement('canvas');
-	offCanvas.width = 854;
-	offCanvas.height = 480;
-	const ctx = offCanvas.getContext('2d');
-	ctx.imageSmoothingEnabled = false;
-
 	const startTime = performance.now();
 	let frameCount = 0;
 	let lastFpsUpdate = startTime;
 	let renderFps = 0;
 
-	function render(now) {
+	async function renderFrame(now) {
 		if (video.readyState >= 2) {
 			const isOriginal = filter.value === 'original';
 
 			let sourceWidth, sourceHeight, sourceElement;
+			let bitmap = null;
+
 			if (isOriginal) {
 				sourceWidth = video.videoWidth;
 				sourceHeight = video.videoHeight;
 				sourceElement = video;
 			} else {
-				ctx.drawImage(video, 0, 0, 1920, 1080, 0, 0, 854, 480);
+				bitmap = await createImageBitmap(video, { resizeWidth: 854, resizeHeight: 480 });
 				sourceWidth = 854;
 				sourceHeight = 480;
-				sourceElement = offCanvas;
+				sourceElement = bitmap;
 			}
 
 			// Recreate GPU texture if dimensions changed
@@ -350,6 +358,8 @@ function startRenderLoop() {
 				{ texture: gpuTexture },
 				[sourceWidth, sourceHeight]
 			);
+
+			if (bitmap) bitmap.close();
 
 			// Update uniform buffer (textureSize + time)
 			const tw = isOriginal ? 2562.0 : 640.0;
@@ -385,11 +395,15 @@ function startRenderLoop() {
 				fpsDiv.textContent = `Source: ${srcLabel} | Render: ${renderFps}fps`;
 			}
 		}
-
-		requestAnimationFrame(render);
 	}
 
-	requestAnimationFrame(render);
+	function render(now) {
+		renderFrame(now).finally(() => {
+			animFrameId = requestAnimationFrame(render);
+		});
+	}
+
+	animFrameId = requestAnimationFrame(render);
 }
 
 startBtn.onclick = () => {

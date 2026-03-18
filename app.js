@@ -103,7 +103,7 @@ function recompileProgram() {
 	gl.enableVertexAttribArray(texCoordLocation);
 	gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 2562.0 : 640.0, filter.value === 'original' ? 1440.0 : 360.0);
+	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920 : 640.0, filter.value === 'original' ? 1080 : 360.0);
 	gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
 
 	updatePositionsForAspectRatio();
@@ -261,6 +261,9 @@ function startRenderLoop() {
 	ctx.imageSmoothingEnabled = false;
 
 	if ( filter.value === 'original' ) {
+		canvas.width = 1920;
+		canvas.height = 1080;
+	} else {
 		canvas.width = 2562;
 		canvas.height = 1440;
 	}
