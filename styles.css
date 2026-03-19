@@ -64,7 +64,6 @@ button {
 	overflow: hidden;
 	position: absolute;
 	max-height: 100%;
-	cursor: none;
 }
 
 #container.snesanalogue {
@@ -111,9 +110,9 @@ button {
 	display: none;
 }
 
-#sidebarToggle {
+#sidebarToggle,
+#fullscreenBtn {
 	position: fixed;
-	right: 15px;
 	top: 15px;
 	z-index: 21;
 	background: rgba(0, 0, 0, 0.7);
@@ -126,7 +125,16 @@ button {
 	width: 44px;
 }
 
-#sidebarToggle:hover {
+#sidebarToggle {
+	right: 15px;
+}
+
+#fullscreenBtn {
+	right: 64px;
+}
+
+#sidebarToggle:hover,
+#fullscreenBtn:hover {
 	background: rgba(40, 40, 40, 0.9);
 }
 

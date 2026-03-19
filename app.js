@@ -7,10 +7,52 @@ const container = document.getElementById('container');
 const menu = document.getElementById('menu');
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebarToggle');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const fpsDiv = document.getElementById('fps');
 const volumeSlider = document.getElementById('volume');
 const video = document.getElementById('video');
 const audio = document.getElementById('audio');
 const canvas = document.getElementById('canvas');
+
+// ── UI inactivity ────────────────────────────────────────────────────────────
+let streamActive = false;
+let uiVisible = true;
+let hideTimerId = null;
+let fpsReceived = false;
+
+function hideUI() {
+	uiVisible = false;
+	sidebarToggle.style.display = 'none';
+	fullscreenBtn.style.display = 'none';
+	sidebar.style.display = 'none';
+	fpsDiv.style.display = 'none';
+	document.body.style.cursor = 'none';
+}
+
+function showUI() {
+	if (!uiVisible) {
+		uiVisible = true;
+		sidebarToggle.style.display = 'block';
+		fullscreenBtn.style.display = 'block';
+		if (fpsReceived) fpsDiv.style.display = 'block';
+		document.body.style.cursor = '';
+	}
+	clearTimeout(hideTimerId);
+	hideTimerId = setTimeout(hideUI, 3000);
+}
+
+document.addEventListener('mousemove', () => {
+	if (streamActive) showUI();
+});
+
+// ── Fullscreen ───────────────────────────────────────────────────────────────
+fullscreenBtn.addEventListener('click', () => {
+	if (!document.fullscreenElement) {
+		document.documentElement.requestFullscreen();
+	} else {
+		document.exitFullscreen();
+	}
+});
 
 let videoStream;
 let audioStream;
@@ -175,6 +217,9 @@ async function startStream() {
 			menu.style.display = 'none';
 			sidebar.style.display = 'block';
 			sidebarToggle.style.display = 'block';
+			fullscreenBtn.style.display = 'block';
+			streamActive = true;
+			hideTimerId = setTimeout(hideUI, 3000);
 			initWebGL();
 			startRenderLoop();
 		};
@@ -268,7 +313,23 @@ function startRenderLoop() {
 		canvas.height = 1440;
 	}
 
+	let frameCount = 0;
+	let lastFpsTime = 0;
+
 	function render(now) {
+		frameCount++;
+		if (lastFpsTime > 0 && now - lastFpsTime >= 1000) {
+			const fps = Math.round(frameCount * 1000 / (now - lastFpsTime));
+			fpsDiv.textContent = `FPS: ${fps}`;
+			if (!fpsReceived) {
+				fpsReceived = true;
+				if (uiVisible) fpsDiv.style.display = 'block';
+			}
+			frameCount = 0;
+			lastFpsTime = now;
+		} else if (lastFpsTime === 0) {
+			lastFpsTime = now;
+		}
 		if (video.readyState >= 2) { // HAVE_CURRENT_DATA
 			gl.viewport(0, 0, canvas.width, canvas.height);
 

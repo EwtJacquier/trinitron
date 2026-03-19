@@ -98,11 +98,9 @@ CAPTURE_FORMATS = {
 }
 
 ASPECT_RATIOS = {
-    'Full HD (16:9)':     (1920, 1080),
-    'SNES Analogue':      (260,  240),
-    'N64 Retroscaler 2x': (320,  240),
-    'PS1 Retroscaler 2x': (320,  240),
-    'PS2 Retroscaler 2x': (320,  240),
+    '16:9': (1920, 1080),
+    '8:7':  (260,  240),
+    '4:3':  (320,  240)
 }
 
 # ─── Inline shaders ───────────────────────────────────────────────────────────
@@ -802,6 +800,7 @@ class ViewerPage(QWidget):
 
         # Auto-hide UI after 3 s of mouse inactivity
         self._ui_visible = True
+        self._fps_received = False
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.setInterval(3000)
@@ -814,7 +813,8 @@ class ViewerPage(QWidget):
 
     def _on_fps(self, text: str):
         self._fps_label.setText(text)
-        self._fps_label.setVisible(True)
+        self._fps_received = True
+        self._fps_label.setVisible(self._ui_visible)
         self._fps_label.adjustSize()
 
     def _on_toggle(self):
@@ -849,6 +849,7 @@ class ViewerPage(QWidget):
         self._toggle_btn.setVisible(False)
         self._fs_btn.setVisible(False)
         self._sidebar.setVisible(False)
+        self._fps_label.setVisible(False)
         self.setCursor(Qt.BlankCursor)
 
     def _show_ui(self):
@@ -856,6 +857,8 @@ class ViewerPage(QWidget):
             self._ui_visible = True
             self._toggle_btn.setVisible(True)
             self._fs_btn.setVisible(True)
+            if self._fps_received:
+                self._fps_label.setVisible(True)
             self.setCursor(Qt.ArrowCursor)
         self._hide_timer.start()
 
