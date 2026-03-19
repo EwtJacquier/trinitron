@@ -131,6 +131,8 @@ button {
 
 #fullscreenBtn {
 	right: 64px;
+	padding-top: 2px;
+    padding-bottom: 3px;
 }
 
 #sidebarToggle:hover,
