@@ -196,13 +196,13 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
                     break
                 if packet.size == 0:
                     continue
-                arr = np.frombuffer(bytes(packet), dtype=np.uint8)
+                arr = np.frombuffer(packet, dtype=np.uint8)  # zero-copy: no bytes() alloc
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 if img is None:
                     continue
-                img = cv2.LUT(img, _lut)
-                if not _new_frame(img):
+                if not _new_frame(img):   # dedup before LUT — skip work on dupes
                     continue
+                cv2.LUT(img, _lut, dst=img)  # in-place: no 6 MB alloc per frame
                 h, w = img.shape[:2]
                 buf[:h * w * 3] = img.reshape(-1)
                 os.write(frame_w, b'\x01')
