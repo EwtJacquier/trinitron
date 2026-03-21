@@ -158,13 +158,37 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
         stream = container.streams.video[0]
         print(f'[worker] {camera_path} {stream.width}x{stream.height} '
               f'@ {float(stream.average_rate):.0f}fps', flush=True)
-        for frame in container.decode(stream):
-            if stop_event.is_set():
-                break
-            img = frame.to_ndarray(format='bgr24')
-            h, w = img.shape[:2]
-            buf[:h * w * 3] = img.reshape(-1)
-            os.write(frame_w, b'\x01')
+        is_mjpeg = options.get('input_format') == 'mjpeg'
+        if is_mjpeg:
+            # Decode raw JPEG packets via libjpeg-turbo (same path as the
+            # browser) — avoids libavcodec's YUV color-range mishandling.
+            # Capture cards encode MJPEG with limited-range YUV (16-235);
+            # cv2.LUT expands to full range (0-255) at SIMD speed.
+            _lut = np.clip(
+                (np.arange(256, dtype=np.float32) - 16.0) * (255.0 / 219.0),
+                0, 255,
+            ).astype(np.uint8)
+            for packet in container.demux(stream):
+                if stop_event.is_set():
+                    break
+                if packet.size == 0:
+                    continue
+                arr = np.frombuffer(bytes(packet), dtype=np.uint8)
+                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if img is None:
+                    continue
+                img = cv2.LUT(img, _lut)
+                h, w = img.shape[:2]
+                buf[:h * w * 3] = img.reshape(-1)
+                os.write(frame_w, b'\x01')
+        else:
+            for frame in container.decode(stream):
+                if stop_event.is_set():
+                    break
+                img = frame.to_ndarray(format='bgr24')
+                h, w = img.shape[:2]
+                buf[:h * w * 3] = img.reshape(-1)
+                os.write(frame_w, b'\x01')
     except Exception as e:
         if not stop_event.is_set():
             print(f'[worker] {e}', flush=True)
@@ -199,7 +223,13 @@ class CaptureThread(QThread):
         }
 
     def set_pixel_format(self, fmt: str):
-        self._options = {**self._options, 'pixel_format': fmt}
+        base = {k: v for k, v in self._options.items()
+                if k not in ('pixel_format', 'input_format')}
+        if fmt == 'mjpeg':
+            # MJPEG is a compressed format; V4L2 requires input_format, not pixel_format.
+            self._options = {**base, 'input_format': 'mjpeg'}
+        else:
+            self._options = {**base, 'pixel_format': fmt}
         if self._stop_event is not None:
             self._stop_event.set()
 
@@ -383,6 +413,19 @@ class WgpuRenderer(WgpuWidget):
             self._frame = frame
         if self._initialized:
             self.request_draw()
+        # ── FPS counter (counts real incoming frames, not render calls) ───────
+        self._frame_count += 1
+        elapsed = time.time() - self._fps_timer
+        if elapsed >= 1.0:
+            fps = self._frame_count / elapsed
+            self._frame_count = 0
+            self._fps_timer = time.time()
+            lsfg = int(os.environ.get('ENABLE_LSFG_VK', '0'))
+            if lsfg:
+                mult = int(os.environ.get('LSFG_MULTIPLIER', '2'))
+                self.fps_updated.emit(f'{fps:.0f}→{fps * mult:.0f} FPS')
+            else:
+                self.fps_updated.emit(f'{fps:.0f} FPS')
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -693,21 +736,7 @@ class WgpuRenderer(WgpuWidget):
         rp2.end()
 
         device.queue.submit([cmd.finish()])
-        self.request_draw()  # re-schedule for continuous animation
-
-        # ── FPS counter ───────────────────────────────────────────────────
-        self._frame_count += 1
-        elapsed = t_now - self._fps_timer
-        if elapsed >= 1.0:
-            fps = self._frame_count / elapsed
-            self._frame_count = 0
-            self._fps_timer = t_now
-            lsfg = int(os.environ.get('ENABLE_LSFG_VK', '0'))
-            if lsfg:
-                mult = int(os.environ.get('LSFG_MULTIPLIER', '2'))
-                self.fps_updated.emit(f'{fps:.0f}→{fps * mult:.0f} FPS')
-            else:
-                self.fps_updated.emit(f'{fps:.0f} FPS')
+        self.request_draw()  # re-schedule for continuous animation (time-based shaders)
 
     def cleanup(self):
         pass  # wgpu resources are released via GC
