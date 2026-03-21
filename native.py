@@ -78,10 +78,10 @@ FILTER_POST = {
 FILTERS_WITH_TIME = {'crtgrainy', 'blurrygrainycrt', 'grainy'}
 
 CAPTURE_FORMATS = {
+    'MJPEG':      'mjpeg',
     'YUYV 4:2:2': 'yuyv422',
     'NV12 4:2:0': 'nv12',
     'BGR 8-8-8':  'bgr24',
-    'MJPEG':      'mjpeg',
 }
 
 ASPECT_RATIOS = {
@@ -136,7 +136,8 @@ def enumerate_mics():
 # ─── Capture worker (subprocess) ─────────────────────────────────────────────
 
 def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
-                 options: dict, stop_event: _mp.Event) -> None:
+                 options: dict, stop_event: _mp.Event,
+                 use_dedup: bool = False) -> None:
     """Runs in a subprocess.  Opens v4l2, writes BGR24 frames to shared memory,
     signals each new frame by writing one byte to frame_w pipe.
 
@@ -159,6 +160,28 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
         print(f'[worker] {camera_path} {stream.width}x{stream.height} '
               f'@ {float(stream.average_rate):.0f}fps', flush=True)
         is_mjpeg = options.get('input_format') == 'mjpeg'
+
+        if use_dedup:
+            # Detect duplicate frames (capture cards repeat frames to maintain
+            # output fps when game fps is lower) so LSFG-VK only sees real frames.
+            # MJPEG threshold=6 to tolerate JPEG re-encode noise; raw formats use 1.
+            dup_threshold = 6 if is_mjpeg else 1
+            prev_sample = None
+
+            def _new_frame(img: np.ndarray) -> bool:
+                nonlocal prev_sample
+                sample = img[::30, ::30].copy()   # ~64×36 sparse sample
+                if prev_sample is not None:
+                    diff = int(np.abs(sample.astype(np.int16) -
+                                      prev_sample.astype(np.int16)).max())
+                    if diff < dup_threshold:
+                        return False
+                prev_sample = sample
+                return True
+        else:
+            def _new_frame(img: np.ndarray) -> bool:
+                return True
+
         if is_mjpeg:
             # Decode raw JPEG packets via libjpeg-turbo (same path as the
             # browser) — avoids libavcodec's YUV color-range mishandling.
@@ -178,6 +201,8 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
                 if img is None:
                     continue
                 img = cv2.LUT(img, _lut)
+                if not _new_frame(img):
+                    continue
                 h, w = img.shape[:2]
                 buf[:h * w * 3] = img.reshape(-1)
                 os.write(frame_w, b'\x01')
@@ -186,6 +211,8 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
                 if stop_event.is_set():
                     break
                 img = frame.to_ndarray(format='bgr24')
+                if not _new_frame(img):
+                    continue
                 h, w = img.shape[:2]
                 buf[:h * w * 3] = img.reshape(-1)
                 os.write(frame_w, b'\x01')
@@ -216,10 +243,12 @@ class CaptureThread(QThread):
         self._running = True
         self._proc: _mp.Process | None = None
         self._stop_event: _mp.Event | None = None
+        lsfg = bool(int(os.environ.get('ENABLE_LSFG_VK', '0')))
+        self._framerate = '30' if lsfg else '60'
         self._options = {
-            'video_size':   '1920x1080',
-            'framerate':    '60',
-            'pixel_format': 'yuyv422',
+            'video_size':  '1920x1080',
+            'framerate':   self._framerate,
+            'input_format': 'yuyv422',
         }
 
     def set_pixel_format(self, fmt: str):
@@ -242,10 +271,11 @@ class CaptureThread(QThread):
             frame_r, frame_w = os.pipe()
             self._stop_event = _mp.Event()
 
+            use_dedup = bool(int(os.environ.get('ENABLE_LSFG_VK', '0')))
             proc = _mp.Process(
                 target=_v4l2_worker,
                 args=(self.camera_path, shm.name, frame_w, self._options,
-                      self._stop_event),
+                      self._stop_event, use_dedup),
                 daemon=True,
             )
             proc.start()
@@ -591,7 +621,7 @@ class WgpuRenderer(WgpuWidget):
 
         device.queue.write_texture(
             {'texture': self._webcam_tex, 'mip_level': 0, 'origin': (0, 0, 0)},
-            bgra.tobytes(),
+            bgra,  # numpy array passed directly — no tobytes() copy
             {'bytes_per_row': img_w * 4, 'rows_per_image': img_h},
             (img_w, img_h, 1),
         )
