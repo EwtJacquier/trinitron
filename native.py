@@ -78,10 +78,10 @@ FILTER_POST = {
 FILTERS_WITH_TIME = {'crtgrainy', 'blurrygrainycrt', 'grainy'}
 
 CAPTURE_FORMATS = {
-    'MJPEG':      'mjpeg',
     'YUYV 4:2:2': 'yuyv422',
     'NV12 4:2:0': 'nv12',
     'BGR 8-8-8':  'bgr24',
+    'MJPEG':      'mjpeg',
 }
 
 ASPECT_RATIOS = {
@@ -243,13 +243,28 @@ class CaptureThread(QThread):
         self._running = True
         self._proc: _mp.Process | None = None
         self._stop_event: _mp.Event | None = None
+        self._needs_downscale = False
+        # Pre-allocated BGRA output buffers — reused every frame, no per-frame malloc
+        self._bgra_ds   = np.empty((DOWNSCALE_H, DOWNSCALE_W, 4), dtype=np.uint8)
+        self._bgra_orig = np.empty((ORIG_H,      ORIG_W,      4), dtype=np.uint8)
         lsfg = bool(int(os.environ.get('ENABLE_LSFG_VK', '0')))
         self._framerate = '30' if lsfg else '60'
-        self._options = {
-            'video_size':  '1920x1080',
-            'framerate':   self._framerate,
-            'input_format': 'yuyv422',
-        }
+        default_fmt = next(iter(CAPTURE_FORMATS.values()))
+        if default_fmt == 'mjpeg':
+            self._options = {
+                'video_size':   '1920x1080',
+                'framerate':    self._framerate,
+                'input_format': 'mjpeg',
+            }
+        else:
+            self._options = {
+                'video_size':   '1920x1080',
+                'framerate':    self._framerate,
+                'pixel_format': default_fmt,
+            }
+
+    def set_needs_downscale(self, val: bool):
+        self._needs_downscale = val
 
     def set_pixel_format(self, fmt: str):
         base = {k: v for k, v in self._options.items()
@@ -293,12 +308,24 @@ class CaptureThread(QThread):
                     data = os.read(frame_r, 256)    # drain pipe
                     if not data:                    # worker closed write end (clean exit)
                         break
-                    frame = frame_buf.copy()
+                    # Resize + BGR→BGRA here in the capture thread so the
+                    # render thread only needs to call write_texture + GPU.
+                    if self._needs_downscale:
+                        small = cv2.resize(frame_buf,
+                                           (DOWNSCALE_W, DOWNSCALE_H),
+                                           interpolation=cv2.INTER_NEAREST)
+                        cv2.cvtColor(small, cv2.COLOR_BGR2BGRA,
+                                     dst=self._bgra_ds)
+                        out = self._bgra_ds.copy()   # ~1.6 MB
+                    else:
+                        cv2.cvtColor(frame_buf, cv2.COLOR_BGR2BGRA,
+                                     dst=self._bgra_orig)
+                        out = self._bgra_orig.copy() # ~8 MB
                     if first:
-                        print(f'CaptureThread: first frame {frame.shape}',
+                        print(f'CaptureThread: first frame {out.shape}',
                               flush=True)
                         first = False
-                    self.frame_ready.emit(frame)
+                    self.frame_ready.emit(out)
                     last_activity = time.time()
                 elif not proc.is_alive():
                     if self._running and not self._stop_event.is_set():
@@ -400,6 +427,7 @@ class WgpuRenderer(WgpuWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.set_update_mode('ondemand', max_fps=60)
         self._mutex = QMutex()
         self._frame = None
         self._filter = 'original'
@@ -605,9 +633,9 @@ class WgpuRenderer(WgpuWidget):
         )
 
     def _upload_webcam_frame(self, frame: np.ndarray):
+        """frame is already BGRA — converted in CaptureThread."""
         device = self._device
         img_h, img_w = frame.shape[:2]
-        bgra = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA))
 
         if self._webcam_tex_size != (img_w, img_h):
             self._webcam_tex = device.create_texture(
@@ -621,7 +649,7 @@ class WgpuRenderer(WgpuWidget):
 
         device.queue.write_texture(
             {'texture': self._webcam_tex, 'mip_level': 0, 'origin': (0, 0, 0)},
-            bgra,  # numpy array passed directly — no tobytes() copy
+            frame,  # already BGRA, passed directly — no extra copy
             {'bytes_per_row': img_w * 4, 'rows_per_image': img_h},
             (img_w, img_h, 1),
         )
@@ -704,17 +732,15 @@ class WgpuRenderer(WgpuWidget):
         filter_name = self._filter
         is_original = (filter_name == 'original')
 
+        # frame is already BGRA at the correct resolution (resized in CaptureThread)
         if is_original:
-            upload = frame
             tex_w, tex_h = float(ORIG_W), float(ORIG_H)
             canvas_w, canvas_h = ORIG_W, ORIG_H
         else:
-            upload = cv2.resize(frame, (DOWNSCALE_W, DOWNSCALE_H),
-                                interpolation=cv2.INTER_NEAREST)
             tex_w, tex_h = 640.0, 360.0   # intentional: matches web app
             canvas_w, canvas_h = CANVAS_W, CANVAS_H
 
-        self._upload_webcam_frame(upload)
+        self._upload_webcam_frame(frame)
         self._ensure_inter_texture(canvas_w, canvas_h)
 
         t_elapsed = t_now - self._start_time
@@ -766,7 +792,8 @@ class WgpuRenderer(WgpuWidget):
         rp2.end()
 
         device.queue.submit([cmd.finish()])
-        self.request_draw()  # re-schedule for continuous animation (time-based shaders)
+        if filter_name in FILTERS_WITH_TIME:
+            self.request_draw()  # re-schedule only for time-animated shaders
 
     def cleanup(self):
         pass  # wgpu resources are released via GC
@@ -902,6 +929,8 @@ class ViewerPage(QWidget):
         self._sidebar = SidebarPanel(self._overlay)
         self._sidebar.setVisible(False)
         self._sidebar.filter_changed.connect(self._gl.set_filter)
+        self._sidebar.filter_changed.connect(
+            lambda f: self._capture.set_needs_downscale(f != 'original'))
         self._sidebar.aspect_changed.connect(self._gl.set_aspect)
         self._sidebar.volume_changed.connect(self._on_volume)
         self._sidebar.format_changed.connect(self._on_format)

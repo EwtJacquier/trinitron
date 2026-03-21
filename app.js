@@ -388,6 +388,13 @@ sidebarToggle.addEventListener('click', () => {
 filter.addEventListener('change', () => {
 	['original', 'downscale', 'crt', 'crtgrainy', 'blurrycrt', 'blurrycrt2', 'blurrygrainycrt', 'sharpen', 'grainy'].forEach(c => container.classList.remove(c));
 	container.classList.add(filter.value);
+	if (filter.value === 'original') {
+		canvas.width = 1920;
+		canvas.height = 1080;
+	} else {
+		canvas.width = 2562;
+		canvas.height = 1440;
+	}
 	recompileProgram();
 });
 
