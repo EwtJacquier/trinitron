@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 native.py — Python CRT Webcam Viewer
-Replicates index.html using PyQt5 + PyOpenGL + OpenCV + sounddevice.
+Replicates index.html using PyQt5 + wgpu + OpenCV + sounddevice.
 Captures via V4L2 (YUYV, uncompressed) instead of MJPEG via getUserMedia.
+Renders via wgpu-py (Vulkan on Linux), enabling LSFG-VK frame generation:
+  ENABLE_LSFG_VK=1 python native.py
 """
 
 import sys
@@ -10,7 +12,6 @@ import os
 import re
 import time
 import glob
-import ctypes
 import threading
 import multiprocessing as _mp
 from multiprocessing import shared_memory
@@ -28,31 +29,16 @@ except Exception:
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QComboBox, QPushButton, QLabel, QSlider, QStackedWidget, QSizePolicy,
-    QOpenGLWidget,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QTimer
-from PyQt5.QtGui import QPalette, QColor, QSurfaceFormat
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QTimer, QEvent, QPoint
+from PyQt5.QtGui import QPalette, QColor
 
-from OpenGL.GL import (
-    glClearColor, glClear, glViewport, glGenBuffers, glBindBuffer,
-    glBufferData, glGenTextures, glBindTexture, glTexImage2D,
-    glTexParameteri, glGenFramebuffers, glBindFramebuffer,
-    glFramebufferTexture2D, glDeleteFramebuffers, glDeleteTextures,
-    glDeleteBuffers, glDrawArrays, glUseProgram, glActiveTexture,
-    glEnableVertexAttribArray, glDisableVertexAttribArray,
-    glVertexAttribPointer, glGetAttribLocation, glGetUniformLocation,
-    glUniform1i, glUniform1f, glUniform2f,
-    glGenVertexArrays, glBindVertexArray, glDeleteVertexArrays,
-    glPixelStorei, glGetError, glGetString, glTexSubImage2D,
-    GL_COLOR_BUFFER_BIT, GL_ARRAY_BUFFER, GL_STATIC_DRAW,
-    GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER,
-    GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE,
-    GL_LINEAR, GL_NEAREST, GL_RGB, GL_BGR, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE,
-    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FLOAT, GL_FALSE,
-    GL_TRIANGLE_STRIP, GL_TEXTURE0, GL_VERTEX_SHADER, GL_FRAGMENT_SHADER,
-    GL_UNPACK_ALIGNMENT, GL_NO_ERROR, GL_VENDOR, GL_RENDERER, GL_VERSION,
-)
-from OpenGL.GL import shaders as gl_shaders
+import wgpu
+# wgpu >= 0.17 uses rendercanvas; older versions use wgpu.gui.qt
+try:
+    from wgpu.gui.qt import WgpuWidget
+except ImportError:
+    from rendercanvas.qt import QRenderWidget as WgpuWidget
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -61,6 +47,7 @@ ORIG_W, ORIG_H = 1920, 1080
 DOWNSCALE_W, DOWNSCALE_H = 854, 480
 
 SHADER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shaders')
+WGSL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shaders', 'wgsl')
 
 FILTER_NAMES = ['original', 'downscale', 'crt', 'crtgrainy', 'blurrycrt',
                 'blurrygrainycrt', 'sharpen', 'grainy']
@@ -103,50 +90,15 @@ ASPECT_RATIOS = {
     '4:3':  (320,  240)
 }
 
-# ─── Inline shaders ───────────────────────────────────────────────────────────
+# ─── WGSL shader loading ──────────────────────────────────────────────────────
 
-# Shared vertex shader (same as vertex.glsl but desktop-patched inline)
-VERT_SRC = """\
-#version 120
-attribute vec4 a_position;
-attribute vec2 a_texCoord;
-varying vec2 v_texCoord;
-void main() {
-    gl_Position = a_position;
-    v_texCoord = a_texCoord;
-}
-"""
-
-# Post-process fragment shader: brightness + saturation
-POST_FRAG_SRC = """\
-#version 120
-varying vec2 v_texCoord;
-uniform sampler2D u_texture;
-uniform float u_brightness;
-uniform float u_saturation;
-void main() {
-    vec4 c = texture2D(u_texture, v_texCoord);
-    c.rgb *= u_brightness;
-    float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-    c.rgb = mix(vec3(luma), c.rgb, u_saturation);
-    gl_FragColor = clamp(c, 0.0, 1.0);
-}
-"""
-
-# ─── GLSL ES → Desktop GL patching ───────────────────────────────────────────
-
-def patch_for_desktop(src: str) -> str:
-    """Strip GLSL ES precision qualifiers and prepend #version 120."""
-    src = re.sub(r'^\s*precision\s+(lowp|mediump|highp)\s+\w+\s*;\n?',
-                 '', src, flags=re.MULTILINE)
-    src = re.sub(r'\b(lowp|mediump|highp)\b\s+', '', src)
-    return '#version 120\n' + src
-
-
-def load_filter_shader(name: str) -> str:
-    path = os.path.join(SHADER_DIR, f'{name}.glsl')
-    with open(path, 'r') as f:
-        return patch_for_desktop(f.read())
+def load_wgsl_shader(frag_name: str) -> str:
+    """Concatenate vertex.wgsl + <frag_name>.wgsl into a single shader module."""
+    with open(os.path.join(WGSL_DIR, 'vertex.wgsl')) as f:
+        vert = f.read()
+    with open(os.path.join(WGSL_DIR, f'{frag_name}.wgsl')) as f:
+        frag = f.read()
+    return vert + '\n' + frag
 
 # ─── Device enumeration ───────────────────────────────────────────────────────
 
@@ -210,7 +162,6 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
             if stop_event.is_set():
                 break
             img = frame.to_ndarray(format='bgr24')
-            img = cv2.flip(img, 0)
             h, w = img.shape[:2]
             buf[:h * w * 3] = img.reshape(-1)
             os.write(frame_w, b'\x01')
@@ -381,10 +332,11 @@ class AudioPassthrough:
             self._stream.close()
             self._stream = None
 
-# ─── GL Widget ────────────────────────────────────────────────────────────────
+# ─── Wgpu Renderer ────────────────────────────────────────────────────────────
 
-class GLWidget(QOpenGLWidget):
+class WgpuRenderer(WgpuWidget):
     fps_updated = pyqtSignal(str)
+    initialized = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -393,265 +345,252 @@ class GLWidget(QOpenGLWidget):
         self._filter = 'original'
         self._aspect = (1920, 1080)
 
-        # GL objects
-        self._programs: dict = {}
-        self._post_program = None
-        self._vao = None
-        self._vbo = None
-        self._texture = 0
-        self._fbo = 0
-        self._fbo_texture = 0
-        self._fbo_size = (0, 0)
-        self._initialized = False
+        self._device = None
+        self._ctx = None
+        self._pipelines = {}           # filter_name → GPURenderPipeline
+        self._post_pipeline = None
+        self._sampler = None
+        self._webcam_tex = None
+        self._webcam_tex_view = None
+        self._webcam_tex_size = (0, 0)
+        self._inter_tex = None
+        self._inter_tex_view = None
+        self._inter_tex_size = (0, 0)
+        self._filter_uniform_buf = None
+        self._post_uniform_buf = None
+        self._filter_bgl = None
+        self._post_bgl = None
+        self._filter_bind_group = None
+        self._post_bind_group = None
+        self._vertex_buf = None
 
         self._start_time = time.time()
         self._frame_count = 0
         self._fps_timer = time.time()
+        self._initialized = False
+        self._swapchain_fmt = 'bgra8unorm'
 
     # ── Public API ──────────────────────────────────────────────────────────
 
     def set_filter(self, name: str):
         self._filter = name
-        self.update()
 
     def set_aspect(self, ratio: tuple):
         self._aspect = ratio
-        self.update()
 
     def on_frame(self, frame: np.ndarray):
         with QMutexLocker(self._mutex):
             self._frame = frame
-        self.update()
+        if self._initialized:
+            self.request_draw()
 
-    # ── GL lifecycle ────────────────────────────────────────────────────────
+    # ── Lifecycle ───────────────────────────────────────────────────────────
 
-    def initializeGL(self):
-        try:
-            self._initializeGL_inner()
-        except Exception as e:
-            import traceback
-            print('initializeGL FAILED:')
-            traceback.print_exc()
+    def _rc_get_present_info(self, present_methods):
+        """Force Vulkan screen present so LSFG-VK can intercept vkQueuePresentKHR."""
+        if 'screen' in present_methods:
+            surface_ids = self._get_surface_ids()
+            if surface_ids:
+                self.setAttribute(Qt.WA_PaintOnScreen, True)
+                return {'method': 'screen', **surface_ids}
+        return super()._rc_get_present_info(present_methods)
 
-    def _initializeGL_inner(self):
-        print(f'GL vendor:   {glGetString(GL_VENDOR).decode()}')
-        print(f'GL renderer: {glGetString(GL_RENDERER).decode()}')
-        print(f'GL version:  {glGetString(GL_VERSION).decode()}')
-
-        glClearColor(0.0, 0.0, 0.0, 1.0)
-
-        # VAO — required in core profile; harmless in compat profile
-        self._vao = int(glGenVertexArrays(1))
-        glBindVertexArray(self._vao)
-
-        # Compile filter programs
-        for name in FILTER_NAMES:
-            frag_src = load_filter_shader(name)
-            prog = self._compile_program(VERT_SRC, frag_src)
-            self._programs[name] = prog
-            print(f'Compiled shader: {name}')
-
-        # Compile post-process program
-        self._post_program = self._compile_program(VERT_SRC, POST_FRAG_SRC)
-        print('Compiled shader: post')
-
-        # Full-screen quad VBO: (x, y, u, v) x 4 vertices
-        # V is flipped so OpenCV rows appear correctly on screen
-        verts = np.array([
-            -1.0,  1.0,  0.0, 1.0,   # top-left
-             1.0,  1.0,  1.0, 1.0,   # top-right
-            -1.0, -1.0,  0.0, 0.0,   # bottom-left
-             1.0, -1.0,  1.0, 0.0,   # bottom-right
-        ], dtype=np.float32)
-        self._vbo = int(glGenBuffers(1))
-        glBindBuffer(GL_ARRAY_BUFFER, self._vbo)
-        glBufferData(GL_ARRAY_BUFFER, verts.nbytes, verts, GL_STATIC_DRAW)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-
-        self._texture = int(glGenTextures(1))
-        self._texture_size = (0, 0)
-        self._initialized = True
-        print('initializeGL OK')
-
-    def _compile_program(self, vert_src: str, frag_src: str):
-        vert = gl_shaders.compileShader(vert_src, GL_VERTEX_SHADER)
-        frag = gl_shaders.compileShader(frag_src, GL_FRAGMENT_SHADER)
-        return gl_shaders.compileProgram(vert, frag)
-
-    def _ensure_fbo(self, w: int, h: int):
-        if self._fbo_size == (w, h):
-            return
-        if self._fbo:
-            glDeleteFramebuffers(1, [self._fbo])
-            glDeleteTextures(1, [self._fbo_texture])
-
-        self._fbo_texture = int(glGenTextures(1))
-        glBindTexture(GL_TEXTURE_2D, self._fbo_texture)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, None)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glBindTexture(GL_TEXTURE_2D, 0)
-
-        self._fbo = int(glGenFramebuffers(1))
-        glBindFramebuffer(GL_FRAMEBUFFER, self._fbo)
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, self._fbo_texture, 0)
-        from OpenGL.GL import glCheckFramebufferStatus, GL_FRAMEBUFFER_COMPLETE
-        status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
-        if status != GL_FRAMEBUFFER_COMPLETE:
-            print(f'FBO incomplete: {status}')
-        glBindFramebuffer(GL_FRAMEBUFFER, self.defaultFramebufferObject())
-        self._fbo_size = (w, h)
-
-    def resizeGL(self, w: int, h: int):
-        pass  # handled in paintGL
-
-    def paintGL(self):
+    def showEvent(self, event):
+        super().showEvent(event)
         if not self._initialized:
-            glClear(GL_COLOR_BUFFER_BIT)
-            return
+            QTimer.singleShot(0, self._init_wgpu)
+
+    def _init_wgpu(self):
         try:
-            self._paintGL_inner()
+            adapter = wgpu.gpu.request_adapter_sync(
+                canvas=self, power_preference='high-performance'
+            )
+            self._device = adapter.request_device_sync()
+            device = self._device
+            print(f'wgpu adapter: {adapter.info}')
+
+            self._ctx = self.get_context('wgpu')
+            for fmt in ('bgra8unorm', 'rgba8unorm', 'bgra8unorm-srgb', 'rgba8unorm-srgb'):
+                try:
+                    self._ctx.configure(device=device, format=fmt)
+                    self._swapchain_fmt = fmt
+                    print(f'Swapchain format: {fmt}')
+                    break
+                except Exception:
+                    continue
+
+            self._sampler = device.create_sampler(
+                min_filter='linear', mag_filter='linear',
+                address_mode_u='clamp-to-edge', address_mode_v='clamp-to-edge',
+            )
+
+            self._filter_uniform_buf = device.create_buffer(
+                size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST
+            )
+            self._post_uniform_buf = device.create_buffer(
+                size=16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST
+            )
+
+            # Vertex buffer: 4 verts × (pos.xy + uv.xy) × f32 = 64 bytes
+            # Standard WGSL UVs: (0,0) = top-left. cv2.flip removed from worker.
+            verts = np.array([
+                -1.0,  1.0,  0.0, 0.0,   # top-left
+                 1.0,  1.0,  1.0, 0.0,   # top-right
+                -1.0, -1.0,  0.0, 1.0,   # bottom-left
+                 1.0, -1.0,  1.0, 1.0,   # bottom-right
+            ], dtype=np.float32)
+            self._vertex_buf = device.create_buffer_with_data(
+                data=verts.tobytes(),
+                usage=wgpu.BufferUsage.VERTEX,
+            )
+
+            self._filter_bgl = device.create_bind_group_layout(entries=[
+                {'binding': 0, 'visibility': wgpu.ShaderStage.FRAGMENT,
+                 'texture': {'sample_type': 'float', 'view_dimension': '2d'}},
+                {'binding': 1, 'visibility': wgpu.ShaderStage.FRAGMENT,
+                 'sampler': {'type': 'filtering'}},
+                {'binding': 2, 'visibility': wgpu.ShaderStage.FRAGMENT,
+                 'buffer': {'type': 'uniform'}},
+            ])
+            self._post_bgl = device.create_bind_group_layout(entries=[
+                {'binding': 0, 'visibility': wgpu.ShaderStage.FRAGMENT,
+                 'texture': {'sample_type': 'float', 'view_dimension': '2d'}},
+                {'binding': 1, 'visibility': wgpu.ShaderStage.FRAGMENT,
+                 'sampler': {'type': 'filtering'}},
+                {'binding': 2,
+                 'visibility': wgpu.ShaderStage.VERTEX | wgpu.ShaderStage.FRAGMENT,
+                 'buffer': {'type': 'uniform'}},
+            ])
+
+            for name in FILTER_NAMES:
+                self._pipelines[name] = self._make_filter_pipeline(name)
+                print(f'Compiled wgpu pipeline: {name}')
+            self._post_pipeline = self._make_post_pipeline()
+            print('Compiled wgpu pipeline: post')
+
+            self._initialized = True
+            self.request_draw(self._draw)
+            print('WgpuRenderer init OK')
+            self.initialized.emit()
         except Exception:
             import traceback
+            print('WgpuRenderer init FAILED:')
             traceback.print_exc()
 
-    def _paintGL_inner(self):
-        t_now = time.time()
+    def _make_filter_pipeline(self, name: str):
+        device = self._device
+        module = device.create_shader_module(code=load_wgsl_shader(name))
+        layout = device.create_pipeline_layout(bind_group_layouts=[self._filter_bgl])
+        return device.create_render_pipeline(
+            layout=layout,
+            vertex={
+                'module': module,
+                'entry_point': 'vs_main',
+                'buffers': [{
+                    'array_stride': 16,
+                    'step_mode': 'vertex',
+                    'attributes': [
+                        {'format': 'float32x2', 'offset': 0, 'shader_location': 0},
+                        {'format': 'float32x2', 'offset': 8, 'shader_location': 1},
+                    ],
+                }],
+            },
+            fragment={
+                'module': module,
+                'entry_point': 'fs_main',
+                'targets': [{'format': 'rgba8unorm'}],
+            },
+            primitive={'topology': 'triangle-strip'},
+        )
 
-        with QMutexLocker(self._mutex):
-            frame = self._frame
+    def _make_post_pipeline(self):
+        device = self._device
+        with open(os.path.join(WGSL_DIR, 'post.wgsl')) as f:
+            code = f.read()
+        module = device.create_shader_module(code=code)
+        layout = device.create_pipeline_layout(bind_group_layouts=[self._post_bgl])
+        return device.create_render_pipeline(
+            layout=layout,
+            vertex={
+                'module': module,
+                'entry_point': 'vs_main',
+                'buffers': [{
+                    'array_stride': 16,
+                    'step_mode': 'vertex',
+                    'attributes': [
+                        {'format': 'float32x2', 'offset': 0, 'shader_location': 0},
+                        {'format': 'float32x2', 'offset': 8, 'shader_location': 1},
+                    ],
+                }],
+            },
+            fragment={
+                'module': module,
+                'entry_point': 'fs_main',
+                'targets': [{'format': self._swapchain_fmt}],
+            },
+            primitive={'topology': 'triangle-strip'},
+        )
 
-        if frame is None:
-            glBindFramebuffer(GL_FRAMEBUFFER, self.defaultFramebufferObject())
-            glClear(GL_COLOR_BUFFER_BIT)
+    def _upload_webcam_frame(self, frame: np.ndarray):
+        device = self._device
+        img_h, img_w = frame.shape[:2]
+        bgra = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA))
+
+        if self._webcam_tex_size != (img_w, img_h):
+            self._webcam_tex = device.create_texture(
+                size=(img_w, img_h, 1),
+                format='bgra8unorm',
+                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
+            )
+            self._webcam_tex_view = self._webcam_tex.create_view()
+            self._webcam_tex_size = (img_w, img_h)
+            self._filter_bind_group = None  # invalidate
+
+        device.queue.write_texture(
+            {'texture': self._webcam_tex, 'mip_level': 0, 'origin': (0, 0, 0)},
+            bgra.tobytes(),
+            {'bytes_per_row': img_w * 4, 'rows_per_image': img_h},
+            (img_w, img_h, 1),
+        )
+
+    def _ensure_inter_texture(self, w: int, h: int):
+        if self._inter_tex_size == (w, h):
             return
+        device = self._device
+        self._inter_tex = device.create_texture(
+            size=(w, h, 1),
+            format='rgba8unorm',
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING,
+        )
+        self._inter_tex_view = self._inter_tex.create_view()
+        self._inter_tex_size = (w, h)
+        self._post_bind_group = None  # invalidate
 
-        # flip already applied in CaptureThread
+    def _get_filter_bind_group(self):
+        if self._filter_bind_group is None:
+            self._filter_bind_group = self._device.create_bind_group(
+                layout=self._filter_bgl,
+                entries=[
+                    {'binding': 0, 'resource': self._webcam_tex_view},
+                    {'binding': 1, 'resource': self._sampler},
+                    {'binding': 2, 'resource': {
+                        'buffer': self._filter_uniform_buf, 'offset': 0, 'size': 16}},
+                ],
+            )
+        return self._filter_bind_group
 
-        filter_name = self._filter
-        is_original = (filter_name == 'original')
-
-        # ── Prepare texture data ──────────────────────────────────────────
-        if is_original:
-            upload = frame
-            tex_w, tex_h = float(ORIG_W), float(ORIG_H)
-            canvas_w, canvas_h = ORIG_W, ORIG_H
-            tex_filter = GL_NEAREST
-        else:
-            upload = cv2.resize(frame, (DOWNSCALE_W, DOWNSCALE_H),
-                                interpolation=cv2.INTER_NEAREST)
-            tex_w, tex_h = 640.0, 360.0   # intentional: matches web app
-            canvas_w, canvas_h = CANVAS_W, CANVAS_H
-            tex_filter = GL_LINEAR
-
-        upload_bgr = np.ascontiguousarray(upload)
-        img_h, img_w = upload_bgr.shape[:2]
-
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-        glBindTexture(GL_TEXTURE_2D, self._texture)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tex_filter)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, tex_filter)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-        if self._texture_size != (img_w, img_h):
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img_w, img_h, 0,
-                         GL_BGR, GL_UNSIGNED_BYTE, upload_bgr)
-            self._texture_size = (img_w, img_h)
-        else:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img_w, img_h,
-                            GL_BGR, GL_UNSIGNED_BYTE, upload_bgr)
-        err = glGetError()
-        if err != GL_NO_ERROR:
-            print(f'glTex*Image2D error: {err}')
-        glBindTexture(GL_TEXTURE_2D, 0)
-
-        # ── Pass 1: filter → FBO ──────────────────────────────────────────
-        self._ensure_fbo(canvas_w, canvas_h)
-
-        glBindFramebuffer(GL_FRAMEBUFFER, self._fbo)
-        glViewport(0, 0, canvas_w, canvas_h)
-        glClear(GL_COLOR_BUFFER_BIT)
-
-        prog = self._programs[filter_name]
-        self._draw_quad(prog, self._texture, extras={
-            'u_textureSize': (tex_w, tex_h),
-            'u_time': (t_now - self._start_time) if filter_name in FILTERS_WITH_TIME else None,
-        })
-
-        # Restore Qt's internal FBO (NOT 0 — QOpenGLWidget uses its own FBO)
-        qt_fbo = self.defaultFramebufferObject()
-        glBindFramebuffer(GL_FRAMEBUFFER, qt_fbo)
-
-        # ── Pass 2: post-process → screen with letterbox ──────────────────
-        sw, sh = self.width(), self.height()
-        vx, vy, vw, vh = self._letterbox(sw, sh)
-
-        glViewport(0, 0, sw, sh)
-        glClearColor(0.0, 0.0, 0.0, 1.0)
-        glClear(GL_COLOR_BUFFER_BIT)
-        glViewport(vx, vy, vw, vh)
-
-        brightness, saturation = FILTER_POST.get(filter_name, (1.0, 1.0))
-        self._draw_quad(self._post_program, self._fbo_texture, extras={
-            'u_brightness': brightness,
-            'u_saturation': saturation,
-        })
-
-        # ── FPS counter ───────────────────────────────────────────────────
-        self._frame_count += 1
-        elapsed = t_now - self._fps_timer
-        if elapsed >= 1.0:
-            fps = self._frame_count / elapsed
-            self._frame_count = 0
-            self._fps_timer = t_now
-            self.fps_updated.emit(f'{fps:.0f} FPS')
-
-    def _draw_quad(self, prog, texture, extras: dict):
-        """Bind prog + texture, set uniforms in extras, draw fullscreen quad."""
-        glBindVertexArray(self._vao)
-        glUseProgram(prog)
-        glBindBuffer(GL_ARRAY_BUFFER, self._vbo)
-
-        stride = 16  # 4 floats * 4 bytes
-        pos_loc = glGetAttribLocation(prog, 'a_position')
-        tc_loc  = glGetAttribLocation(prog, 'a_texCoord')
-
-        if pos_loc >= 0:
-            glEnableVertexAttribArray(pos_loc)
-            glVertexAttribPointer(pos_loc, 2, GL_FLOAT, GL_FALSE,
-                                  stride, None)
-        if tc_loc >= 0:
-            glEnableVertexAttribArray(tc_loc)
-            glVertexAttribPointer(tc_loc, 2, GL_FLOAT, GL_FALSE,
-                                  stride, ctypes.c_void_p(8))
-
-        glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, texture)
-        u = glGetUniformLocation(prog, 'u_texture')
-        if u >= 0:
-            glUniform1i(u, 0)
-
-        for name, val in extras.items():
-            if val is None:
-                continue
-            loc = glGetUniformLocation(prog, name)
-            if loc < 0:
-                continue
-            if isinstance(val, tuple):
-                glUniform2f(loc, val[0], val[1])
-            else:
-                glUniform1f(loc, val)
-
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
-
-        if pos_loc >= 0:
-            glDisableVertexAttribArray(pos_loc)
-        if tc_loc >= 0:
-            glDisableVertexAttribArray(tc_loc)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-        glUseProgram(0)
+    def _get_post_bind_group(self):
+        if self._post_bind_group is None:
+            self._post_bind_group = self._device.create_bind_group(
+                layout=self._post_bgl,
+                entries=[
+                    {'binding': 0, 'resource': self._inter_tex_view},
+                    {'binding': 1, 'resource': self._sampler},
+                    {'binding': 2, 'resource': {
+                        'buffer': self._post_uniform_buf, 'offset': 0, 'size': 16}},
+                ],
+            )
+        return self._post_bind_group
 
     def _letterbox(self, sw: int, sh: int):
         aw, ah = self._aspect
@@ -667,16 +606,111 @@ class GLWidget(QOpenGLWidget):
         vy = (sh - vh) // 2
         return vx, vy, vw, vh
 
+    def _draw(self):
+        if not self._initialized:
+            return
+
+        device = self._device
+        t_now = time.time()
+
+        with QMutexLocker(self._mutex):
+            frame = self._frame
+
+        if frame is None:
+            current_tex = self._ctx.get_current_texture()
+            view = current_tex.create_view()
+            cmd = device.create_command_encoder()
+            rp = cmd.begin_render_pass(color_attachments=[{
+                'view': view, 'resolve_target': None,
+                'clear_value': (0, 0, 0, 1), 'load_op': 'clear', 'store_op': 'store',
+            }])
+            rp.end()
+            device.queue.submit([cmd.finish()])
+            return
+
+        filter_name = self._filter
+        is_original = (filter_name == 'original')
+
+        if is_original:
+            upload = frame
+            tex_w, tex_h = float(ORIG_W), float(ORIG_H)
+            canvas_w, canvas_h = ORIG_W, ORIG_H
+        else:
+            upload = cv2.resize(frame, (DOWNSCALE_W, DOWNSCALE_H),
+                                interpolation=cv2.INTER_NEAREST)
+            tex_w, tex_h = 640.0, 360.0   # intentional: matches web app
+            canvas_w, canvas_h = CANVAS_W, CANVAS_H
+
+        self._upload_webcam_frame(upload)
+        self._ensure_inter_texture(canvas_w, canvas_h)
+
+        t_elapsed = t_now - self._start_time
+        filter_data = np.array([tex_w, tex_h, t_elapsed, 0.0], dtype=np.float32)
+        device.queue.write_buffer(self._filter_uniform_buf, 0, filter_data.tobytes())
+
+        brightness, saturation = FILTER_POST.get(filter_name, (1.0, 1.0))
+        post_data = np.array([brightness, saturation, 0.0, 0.0], dtype=np.float32)
+        device.queue.write_buffer(self._post_uniform_buf, 0, post_data.tobytes())
+
+        cmd = device.create_command_encoder()
+
+        # ── Pass 1: filter → inter_tex ────────────────────────────────────
+        rp1 = cmd.begin_render_pass(color_attachments=[{
+            'view': self._inter_tex_view,
+            'resolve_target': None,
+            'clear_value': (0, 0, 0, 1),
+            'load_op': 'clear',
+            'store_op': 'store',
+        }])
+        rp1.set_pipeline(self._pipelines[filter_name])
+        rp1.set_bind_group(0, self._get_filter_bind_group())
+        rp1.set_vertex_buffer(0, self._vertex_buf)
+        rp1.set_viewport(0, 0, canvas_w, canvas_h, 0, 1)
+        rp1.draw(4)
+        rp1.end()
+
+        # ── Pass 2: post → swapchain with letterbox ───────────────────────
+        sw, sh = self.width(), self.height()
+        if sw <= 0 or sh <= 0:
+            device.queue.submit([cmd.finish()])
+            return
+        vx, vy, vw, vh = self._letterbox(sw, sh)
+
+        current_tex = self._ctx.get_current_texture()
+        sc_view = current_tex.create_view()
+        rp2 = cmd.begin_render_pass(color_attachments=[{
+            'view': sc_view,
+            'resolve_target': None,
+            'clear_value': (0, 0, 0, 1),
+            'load_op': 'clear',
+            'store_op': 'store',
+        }])
+        rp2.set_pipeline(self._post_pipeline)
+        rp2.set_bind_group(0, self._get_post_bind_group())
+        rp2.set_vertex_buffer(0, self._vertex_buf)
+        rp2.set_viewport(vx, vy, vw, vh, 0, 1)
+        rp2.draw(4)
+        rp2.end()
+
+        device.queue.submit([cmd.finish()])
+        self.request_draw()  # re-schedule for continuous animation
+
+        # ── FPS counter ───────────────────────────────────────────────────
+        self._frame_count += 1
+        elapsed = t_now - self._fps_timer
+        if elapsed >= 1.0:
+            fps = self._frame_count / elapsed
+            self._frame_count = 0
+            self._fps_timer = t_now
+            lsfg = int(os.environ.get('ENABLE_LSFG_VK', '0'))
+            if lsfg:
+                mult = int(os.environ.get('LSFG_MULTIPLIER', '2'))
+                self.fps_updated.emit(f'{fps:.0f}→{fps * mult:.0f} FPS')
+            else:
+                self.fps_updated.emit(f'{fps:.0f} FPS')
+
     def cleanup(self):
-        self.makeCurrent()
-        if self._texture:
-            glDeleteTextures(1, [self._texture])
-        if self._fbo:
-            glDeleteFramebuffers(1, [self._fbo])
-            glDeleteTextures(1, [self._fbo_texture])
-        if self._vbo:
-            glDeleteBuffers(1, [self._vbo])
-        self.doneCurrent()
+        pass  # wgpu resources are released via GC
 
 # ─── Sidebar panel ────────────────────────────────────────────────────────────
 
@@ -730,6 +764,48 @@ class SidebarPanel(QWidget):
 
         layout.addStretch()
 
+# ─── Overlay window ───────────────────────────────────────────────────────────
+
+class OverlayWindow(QWidget):
+    """Frameless transparent top-level window that floats over the wgpu surface.
+    Holds all HUD widgets so they are composited by the window manager above
+    the Vulkan swapchain (which owns its own native X11 window).
+    """
+
+    def __init__(self, viewport: QWidget, show_ui_cb):
+        super().__init__(
+            None,
+            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setMouseTracking(True)
+        self._viewport = viewport
+        self._show_ui_cb = show_ui_cb
+
+    def sync(self):
+        if not self._viewport.isVisible():
+            return
+        tl = self._viewport.mapToGlobal(QPoint(0, 0))
+        self.setGeometry(tl.x(), tl.y(),
+                         self._viewport.width(), self._viewport.height())
+
+    def eventFilter(self, obj, event):
+        t = event.type()
+        if t in (QEvent.Move, QEvent.Resize, QEvent.WindowStateChange):
+            self.sync()
+        elif t == QEvent.Hide:
+            self.hide()
+        elif t == QEvent.Show:
+            self.sync()
+            self.show()
+        return False
+
+    def mouseMoveEvent(self, event):
+        self._show_ui_cb()
+        super().mouseMoveEvent(event)
+
+
 # ─── Viewer page ──────────────────────────────────────────────────────────────
 
 class ViewerPage(QWidget):
@@ -737,11 +813,16 @@ class ViewerPage(QWidget):
         super().__init__(parent)
         self.setStyleSheet('background: black;')
 
-        self._gl = GLWidget(self)
+        self._gl = WgpuRenderer(self)
         self._gl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._gl.fps_updated.connect(self._on_fps)
+        self._gl.initialized.connect(self._on_renderer_init)
+
+        # Transparent overlay window for all HUD widgets
+        self._overlay = OverlayWindow(self, self._show_ui)
 
         # FPS label (top-left, hidden by default)
-        self._fps_label = QLabel('-- FPS', self)
+        self._fps_label = QLabel('-- FPS', self._overlay)
         self._fps_label.setStyleSheet(
             'color: white; background: rgba(0,0,0,128); '
             'padding: 4px; font-size: 13px; border-radius: 3px;'
@@ -749,10 +830,9 @@ class ViewerPage(QWidget):
         self._fps_label.adjustSize()
         self._fps_label.move(10, 10)
         self._fps_label.setVisible(False)
-        self._gl.fps_updated.connect(self._on_fps)
 
-        # "Waiting for signal" overlay — visible until first FPS update
-        self._waiting_label = QLabel('Waiting for signal\u2026', self)
+        # "Waiting for signal" label — visible until first FPS update
+        self._waiting_label = QLabel('Waiting for signal\u2026', self._overlay)
         self._waiting_label.setStyleSheet(
             'color: white; font-size: 18px; background: transparent;'
         )
@@ -760,7 +840,7 @@ class ViewerPage(QWidget):
         self._gl.fps_updated.connect(lambda _: self._waiting_label.setVisible(False))
 
         # Sidebar (hidden by default)
-        self._sidebar = SidebarPanel(self)
+        self._sidebar = SidebarPanel(self._overlay)
         self._sidebar.setVisible(False)
         self._sidebar.filter_changed.connect(self._gl.set_filter)
         self._sidebar.aspect_changed.connect(self._gl.set_aspect)
@@ -775,13 +855,13 @@ class ViewerPage(QWidget):
         )
 
         # Sidebar toggle button (top-right)
-        self._toggle_btn = QPushButton('☰', self)
+        self._toggle_btn = QPushButton('☰', self._overlay)
         self._toggle_btn.setFixedSize(44, 44)
         self._toggle_btn.setStyleSheet(_btn_style)
         self._toggle_btn.clicked.connect(self._on_toggle)
 
         # Fullscreen button (next to sidebar toggle)
-        self._fs_btn = QPushButton('⛶', self)
+        self._fs_btn = QPushButton('⛶', self._overlay)
         self._fs_btn.setFixedSize(44, 44)
         self._fs_btn.setStyleSheet(_btn_style)
         self._fs_btn.clicked.connect(self._on_fullscreen)
@@ -806,10 +886,12 @@ class ViewerPage(QWidget):
         self._hide_timer.setInterval(3000)
         self._hide_timer.timeout.connect(self._hide_ui)
         self._hide_timer.start()
-        self.setMouseTracking(True)
-        self._gl.setMouseTracking(True)
 
         self._layout_widgets()
+
+    def _on_renderer_init(self):
+        self._overlay.sync()
+        self._overlay.show()
 
     def _on_fps(self, text: str):
         self._fps_label.setText(text)
@@ -843,6 +925,7 @@ class ViewerPage(QWidget):
         self._toggle_btn.move(w - 59 - 49, 15)
         self._sidebar.move(w - 220, 0)
         self._sidebar.resize(220, h)
+        self._overlay.sync()
 
     def _hide_ui(self):
         self._ui_visible = False
@@ -850,7 +933,7 @@ class ViewerPage(QWidget):
         self._fs_btn.setVisible(False)
         self._sidebar.setVisible(False)
         self._fps_label.setVisible(False)
-        self.setCursor(Qt.BlankCursor)
+        self._overlay.setCursor(Qt.BlankCursor)
 
     def _show_ui(self):
         if not self._ui_visible:
@@ -859,12 +942,17 @@ class ViewerPage(QWidget):
             self._fs_btn.setVisible(True)
             if self._fps_received:
                 self._fps_label.setVisible(True)
-            self.setCursor(Qt.ArrowCursor)
+            self._overlay.setCursor(Qt.ArrowCursor)
         self._hide_timer.start()
 
-    def mouseMoveEvent(self, event):
-        self._show_ui()
-        super().mouseMoveEvent(event)
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.window().installEventFilter(self._overlay)
+        QTimer.singleShot(0, self._overlay.sync)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._overlay.hide()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -875,6 +963,7 @@ class ViewerPage(QWidget):
         if self._audio:
             self._audio.stop()
         self._gl.cleanup()
+        self._overlay.close()
 
 # ─── Setup page ───────────────────────────────────────────────────────────────
 
@@ -969,13 +1058,6 @@ class MainWindow(QMainWindow):
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 def main():
-    # Request OpenGL 2.1 compatibility profile (supports attribute/varying/gl_FragColor)
-    fmt = QSurfaceFormat()
-    fmt.setVersion(2, 1)
-    fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
-    fmt.setSwapInterval(0)  # disable VSync — let render run as fast as possible
-    QSurfaceFormat.setDefaultFormat(fmt)
-
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 
