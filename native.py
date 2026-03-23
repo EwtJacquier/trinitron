@@ -40,6 +40,17 @@ try:
 except ImportError:
     from rendercanvas.qt import QRenderWidget as WgpuWidget
 
+# ─── LSFG-VK detection ───────────────────────────────────────────────────────
+
+def _lsfg_loaded() -> bool:
+    """Return True if the LSFG-VK Vulkan layer .so is mapped in this process.
+    Must be called after wgpu.gpu.request_adapter_sync() so Vulkan is loaded."""
+    try:
+        with open('/proc/self/maps') as f:
+            return 'lsfg' in f.read().lower()
+    except OSError:
+        return False
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 CANVAS_W, CANVAS_H = 2562, 1440
@@ -247,8 +258,7 @@ class CaptureThread(QThread):
         # Pre-allocated BGRA output buffers — reused every frame, no per-frame malloc
         self._bgra_ds   = np.empty((DOWNSCALE_H, DOWNSCALE_W, 4), dtype=np.uint8)
         self._bgra_orig = np.empty((ORIG_H,      ORIG_W,      4), dtype=np.uint8)
-        lsfg = bool(int(os.environ.get('ENABLE_LSFG_VK', '0')))
-        self._framerate = '30' if lsfg else '60'
+        self._framerate = '60'
         default_fmt = next(iter(CAPTURE_FORMATS.values()))
         if default_fmt == 'mjpeg':
             self._options = {
@@ -265,6 +275,13 @@ class CaptureThread(QThread):
 
     def set_needs_downscale(self, val: bool):
         self._needs_downscale = val
+
+    def set_framerate(self, fps: str):
+        """Switch capture framerate (e.g. '30' for LSFG). Restarts the subprocess."""
+        self._framerate = fps
+        self._options = {**self._options, 'framerate': fps}
+        if self._stop_event is not None:
+            self._stop_event.set()
 
     def set_pixel_format(self, fmt: str):
         base = {k: v for k, v in self._options.items()
@@ -286,7 +303,7 @@ class CaptureThread(QThread):
             frame_r, frame_w = os.pipe()
             self._stop_event = _mp.Event()
 
-            use_dedup = bool(int(os.environ.get('ENABLE_LSFG_VK', '0')))
+            use_dedup = True
             proc = _mp.Process(
                 target=_v4l2_worker,
                 args=(self.camera_path, shm.name, frame_w, self._options,
@@ -424,6 +441,7 @@ class AudioPassthrough:
 class WgpuRenderer(WgpuWidget):
     fps_updated = pyqtSignal(str)
     initialized = pyqtSignal()
+    lsfg_detected = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -457,6 +475,7 @@ class WgpuRenderer(WgpuWidget):
         self._fps_timer = time.time()
         self._initialized = False
         self._swapchain_fmt = 'bgra8unorm'
+        self._lsfg_active = False
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -478,8 +497,7 @@ class WgpuRenderer(WgpuWidget):
             fps = self._frame_count / elapsed
             self._frame_count = 0
             self._fps_timer = time.time()
-            lsfg = int(os.environ.get('ENABLE_LSFG_VK', '0'))
-            if lsfg:
+            if self._lsfg_active:
                 mult = int(os.environ.get('LSFG_MULTIPLIER', '2'))
                 self.fps_updated.emit(f'{fps:.0f}→{fps * mult:.0f} FPS')
             else:
@@ -519,6 +537,11 @@ class WgpuRenderer(WgpuWidget):
                     break
                 except Exception:
                     continue
+
+            # Detect LSFG-VK: after Vulkan is loaded, its layer .so appears in /proc/self/maps
+            self._lsfg_active = _lsfg_loaded()
+            print(f'LSFG-VK detected: {self._lsfg_active}')
+            self.lsfg_detected.emit(self._lsfg_active)
 
             self._sampler = device.create_sampler(
                 min_filter='linear', mag_filter='linear',
@@ -903,6 +926,7 @@ class ViewerPage(QWidget):
         self._gl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._gl.fps_updated.connect(self._on_fps)
         self._gl.initialized.connect(self._on_renderer_init)
+        self._gl.lsfg_detected.connect(self._on_lsfg_detected)
 
         # Transparent overlay window for all HUD widgets
         self._overlay = OverlayWindow(self, self._show_ui)
@@ -1000,6 +1024,12 @@ class ViewerPage(QWidget):
     def _on_format(self, fmt: str):
         self._waiting_label.setVisible(True)
         self._capture.set_pixel_format(fmt)
+
+    def _on_lsfg_detected(self, active: bool):
+        if active:
+            print('LSFG-VK active — switching capture fps')
+            # is_mjpeg = options.get('input_format') == 'mjpeg' #'60' if is_mjpeg else '30'
+            self._capture.set_framerate('30')
 
     def _on_volume(self, vol: float):
         if self._audio:

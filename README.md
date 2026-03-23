@@ -1,3 +1,3 @@
 ## Running
-ENABLE_LSFG_VK=1 python3 native.py
-ENABLE_LSFG_VK=1 LSFG_MULTIPLIER=3 LSFG_EXPERIMENTAL_PRESENT_MODE='immediate' LSFG_FLOW_SCALE=0.8 LSFG_PERFORMANCE_MODE=1 python3 native.py
+python3 native.py
+LSFG_MULTIPLIER=3 python3 native.py
