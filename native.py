@@ -51,6 +51,30 @@ def _lsfg_loaded() -> bool:
     except OSError:
         return False
 
+
+def _lsfg_multiplier() -> int:
+    """Read the frame multiplier from ~/.config/lsfg-vk/conf.toml for the
+    current executable.  Falls back to 2 if the file is missing or has no
+    matching entry."""
+    import re
+    exe = os.path.basename(sys.executable)  # e.g. "python3"
+    conf = os.path.expanduser('~/.config/lsfg-vk/conf.toml')
+    try:
+        with open(conf) as f:
+            text = f.read()
+    except OSError:
+        return 2
+
+    # Split into [[game]] blocks and find the one whose exe matches.
+    blocks = re.split(r'\[\[game\]\]', text)
+    for block in blocks[1:]:
+        exe_match = re.search(r'exe\s*=\s*"([^"]+)"', block)
+        if exe_match and exe_match.group(1) == exe:
+            mult_match = re.search(r'multiplier\s*=\s*(\d+)', block)
+            if mult_match:
+                return int(mult_match.group(1))
+    return 2
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 CANVAS_W, CANVAS_H = 2562, 1440
@@ -510,7 +534,7 @@ class WgpuRenderer(WgpuWidget):
             self._frame_count = 0
             self._fps_timer = time.time()
             if self._lsfg_active:
-                mult = int(os.environ.get('LSFG_MULTIPLIER', '2'))
+                mult = _lsfg_multiplier()
                 self.fps_updated.emit(f'{fps:.0f}→{fps * mult:.0f} FPS')
             else:
                 self.fps_updated.emit(f'{fps:.0f} FPS')
