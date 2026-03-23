@@ -177,17 +177,30 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
             # output fps when game fps is lower) so LSFG-VK only sees real frames.
             # MJPEG threshold=6 to tolerate JPEG re-encode noise; raw formats use 1.
             dup_threshold = 6 if is_mjpeg else 1
-            prev_sample = None
+
+            # 256 fixed random positions spread across the full frame.
+            # Scattered fancy-indexing avoids strided access over the full 6 MB
+            # array and eliminates int16 allocations per frame.
+            _rng = np.random.default_rng(42)
+            _rows = _rng.integers(0, ORIG_H, 256)
+            _cols = _rng.integers(0, ORIG_W, 256)
+            prev_sample = np.empty((256, 3), dtype=np.uint8)
+            prev_sample_set = False
 
             def _new_frame(img: np.ndarray) -> bool:
-                nonlocal prev_sample
-                sample = img[::30, ::30].copy()   # ~64×36 sparse sample
-                if prev_sample is not None:
-                    diff = int(np.abs(sample.astype(np.int16) -
-                                      prev_sample.astype(np.int16)).max())
-                    if diff < dup_threshold:
+                nonlocal prev_sample_set
+                sample = img[_rows, _cols]   # 256 scattered pixels, no copy
+                if prev_sample_set:
+                    # Skip dedup when the frame is a solid/flat color (black
+                    # screen, fade, loading screen) — all samples would match
+                    # prev_sample and every frame would be dropped, causing a
+                    # freeze. If internal spread of the sample is tiny the
+                    # scene is flat and we let the frame through unconditionally.
+                    flat = int(sample.max()) - int(sample.min()) < 15
+                    if not flat and int(cv2.absdiff(sample, prev_sample).max()) < dup_threshold:
                         return False
-                prev_sample = sample
+                np.copyto(prev_sample, sample)
+                prev_sample_set = True
                 return True
         else:
             def _new_frame(img: np.ndarray) -> bool:
@@ -303,11 +316,10 @@ class CaptureThread(QThread):
             frame_r, frame_w = os.pipe()
             self._stop_event = _mp.Event()
 
-            use_dedup = True
             proc = _mp.Process(
                 target=_v4l2_worker,
                 args=(self.camera_path, shm.name, frame_w, self._options,
-                      self._stop_event, use_dedup),
+                      self._stop_event, True),
                 daemon=True,
             )
             proc.start()
