@@ -927,6 +927,16 @@ class OverlayWindow(QWidget):
         self.setMouseTracking(True)
         self._viewport = viewport
         self._show_ui_cb = show_ui_cb
+        QApplication.instance().applicationStateChanged.connect(
+            self._on_app_state_changed)
+
+    def _on_app_state_changed(self, state):
+        if state == Qt.ApplicationActive:
+            if self._viewport.isVisible():
+                self.sync()
+                self.show()
+        else:
+            self.hide()
 
     def sync(self):
         if not self._viewport.isVisible():
