@@ -2,9 +2,9 @@
 """
 native.py — Python CRT Webcam Viewer
 Replicates index.html using PyQt5 + wgpu + OpenCV + sounddevice.
-Captures via V4L2 (YUYV, uncompressed) instead of MJPEG via getUserMedia.
-Renders via wgpu-py (Vulkan on Linux), enabling LSFG-VK frame generation:
-  ENABLE_LSFG_VK=1 python native.py
+Captures via V4L2 (YUYV, uncompressed) instead of MJPEG via getUserMedia,
+or a game window/monitor via the Wayland ScreenCast portal + PipeWire.
+Renders via wgpu-py (Vulkan on Linux).
 """
 
 import sys
@@ -12,6 +12,7 @@ import os
 import re
 import time
 import glob
+import faulthandler
 import threading
 import multiprocessing as _mp
 from multiprocessing import shared_memory
@@ -39,41 +40,6 @@ try:
     from wgpu.gui.qt import WgpuWidget
 except ImportError:
     from rendercanvas.qt import QRenderWidget as WgpuWidget
-
-# ─── LSFG-VK detection ───────────────────────────────────────────────────────
-
-def _lsfg_loaded() -> bool:
-    """Return True if the LSFG-VK Vulkan layer .so is mapped in this process.
-    Must be called after wgpu.gpu.request_adapter_sync() so Vulkan is loaded."""
-    try:
-        with open('/proc/self/maps') as f:
-            return 'lsfg' in f.read().lower()
-    except OSError:
-        return False
-
-
-def _lsfg_multiplier() -> int:
-    """Read the frame multiplier from ~/.config/lsfg-vk/conf.toml for the
-    current executable.  Falls back to 2 if the file is missing or has no
-    matching entry."""
-    import re
-    exe = os.path.basename(sys.executable)  # e.g. "python3"
-    conf = os.path.expanduser('~/.config/lsfg-vk/conf.toml')
-    try:
-        with open(conf) as f:
-            text = f.read()
-    except OSError:
-        return 2
-
-    # Split into [[game]] blocks and find the one whose exe matches.
-    blocks = re.split(r'\[\[game\]\]', text)
-    for block in blocks[1:]:
-        exe_match = re.search(r'exe\s*=\s*"([^"]+)"', block)
-        if exe_match and exe_match.group(1) == exe:
-            mult_match = re.search(r'multiplier\s*=\s*(\d+)', block)
-            if mult_match:
-                return int(mult_match.group(1))
-    return 2
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -124,6 +90,25 @@ ASPECT_RATIOS = {
     '8:7':  (260,  240),
     '4:3':  (320,  240)
 }
+
+# ─── Screen-capture crash log ─────────────────────────────────────────────────
+# Diagnostics for the Wayland portal/PipeWire path, which crashed on the picker
+# dialog. faulthandler dumps the native + per-thread Python stack here on a
+# segfault (SIGSEGV/SIGABRT) — the only way to see a non-Python crash.
+SCREEN_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'screencapture.log')
+_screen_log_fh = None
+
+def _screenlog(msg: str) -> None:
+    global _screen_log_fh
+    try:
+        if _screen_log_fh is None:
+            _screen_log_fh = open(SCREEN_LOG, 'a', buffering=1)
+            faulthandler.enable(file=_screen_log_fh, all_threads=True)
+        _screen_log_fh.write(f'{time.strftime("%H:%M:%S")} {msg}\n')
+        print(msg, flush=True)
+    except OSError:
+        pass
 
 # ─── WGSL shader loading ──────────────────────────────────────────────────────
 
@@ -198,7 +183,8 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
 
         if use_dedup:
             # Detect duplicate frames (capture cards repeat frames to maintain
-            # output fps when game fps is lower) so LSFG-VK only sees real frames.
+            # output fps when the game's fps is lower) so the FPS counter and
+            # render reflect the source's real cadence.
             # MJPEG threshold=6 to tolerate JPEG re-encode noise; raw formats use 1.
             dup_threshold = 6 if is_mjpeg else 1
 
@@ -239,21 +225,53 @@ def _v4l2_worker(camera_path: str, shm_name: str, frame_w: int,
                 (np.arange(256, dtype=np.float32) - 16.0) * (255.0 / 219.0),
                 0, 255,
             ).astype(np.uint8)
-            for packet in container.demux(stream):
-                if stop_event.is_set():
-                    break
-                if packet.size == 0:
-                    continue
-                arr = np.frombuffer(packet, dtype=np.uint8)  # zero-copy: no bytes() alloc
-                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                if img is None:
-                    continue
-                if not _new_frame(img):   # dedup before LUT — skip work on dupes
-                    continue
-                cv2.LUT(img, _lut, dst=img)  # in-place: no 6 MB alloc per frame
-                h, w = img.shape[:2]
-                buf[:h * w * 3] = img.reshape(-1)
-                os.write(frame_w, b'\x01')
+
+            # 1080p JPEG decode costs ~16 ms on one core → caps a single thread
+            # at ~60 fps and makes it fall behind. cv2.imdecode releases the GIL,
+            # so a small thread pool decodes frames in parallel across cores.
+            # Demux (cheap) stays on this thread; results are collected in
+            # submission order, so dedup/LUT/shm stay serial and unchanged.
+            # In-flight depth = thread count → adds ~depth frames of latency, so
+            # keep it small. Override with TRINITRON_DECODE_THREADS.
+            from concurrent.futures import ThreadPoolExecutor
+            from collections import deque
+            n_threads = int(os.environ.get('TRINITRON_DECODE_THREADS', 0)) or \
+                min(4, os.cpu_count() or 4)
+
+            def _decode_job(jpeg: bytes):
+                return cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+
+            packets = container.demux(stream)
+
+            def _submit_next(pool, futures):
+                # Copy the compressed bytes out of the packet before the next
+                # demux frees them — the decode runs later on another thread.
+                for pkt in packets:
+                    if pkt.size == 0:
+                        continue
+                    futures.append(pool.submit(_decode_job, bytes(pkt)))
+                    return True
+                return False
+
+            pool = ThreadPoolExecutor(max_workers=n_threads)
+            futures: deque = deque()
+            try:
+                for _ in range(n_threads):       # prime the pipeline
+                    if not _submit_next(pool, futures):
+                        break
+                while not stop_event.is_set() and futures:
+                    img = futures.popleft().result()
+                    _submit_next(pool, futures)  # refill to keep threads busy
+                    if img is None:
+                        continue
+                    if not _new_frame(img):      # dedup before LUT — skip dupes
+                        continue
+                    cv2.LUT(img, _lut, dst=img)  # in-place: no 6 MB alloc per frame
+                    h, w = img.shape[:2]
+                    buf[:h * w * 3] = img.reshape(-1)
+                    os.write(frame_w, b'\x01')
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
         else:
             for frame in container.decode(stream):
                 if stop_event.is_set():
@@ -312,13 +330,6 @@ class CaptureThread(QThread):
 
     def set_needs_downscale(self, val: bool):
         self._needs_downscale = val
-
-    def set_framerate(self, fps: str):
-        """Switch capture framerate (e.g. '30' for LSFG). Restarts the subprocess."""
-        self._framerate = fps
-        self._options = {**self._options, 'framerate': fps}
-        if self._stop_event is not None:
-            self._stop_event.set()
 
     def set_pixel_format(self, fmt: str):
         base = {k: v for k, v in self._options.items()
@@ -413,7 +424,246 @@ class CaptureThread(QThread):
             self._proc.terminate()
         self.wait()
 
-# ─── Audio passthrough ────────────────────────────────────────────────────────
+# ─── Screen capture (Wayland / PipeWire via xdg-desktop-portal) ───────────────
+
+class ScreenCaptureThread(QThread):
+    """Captures a window or monitor on Wayland through the xdg-desktop-portal
+    ScreenCast interface + PipeWire, emitting BGRA frames exactly like
+    CaptureThread so the renderer is source-agnostic.
+
+    The portal pops a system 'share' dialog where the user picks which window
+    (or screen) to capture — set the game to a small/480p window and pick it to
+    preview a CRT filter over it.
+    """
+
+    frame_ready = pyqtSignal(object)
+    error = pyqtSignal(str)
+    size_changed = pyqtSignal(int, int)   # captured content (w, h) → letterbox aspect
+
+    def __init__(self):
+        super().__init__()
+        self._needs_downscale = False
+        self._loop = None         # currently-running GLib loop (handshake or pipeline)
+        self._pipeline = None
+        self._bus = None          # keep the D-Bus connection alive → keeps the session
+        self._last_size = (0, 0)
+        self._crop = None         # [x0,y0,x1,y1] union bbox of non-black content
+        self._raw_size = (0, 0)   # stream size; changing it resets the crop
+        self._frame_n = 0
+        self._autocrop = os.environ.get('TRINITRON_NO_AUTOCROP', '') == ''
+
+    def set_needs_downscale(self, val: bool):
+        self._needs_downscale = val
+
+    def _update_crop(self, bgr: np.ndarray) -> None:
+        """Grow the content bbox to include all non-black pixels. A low-res
+        windowed game renders into the top-left of a larger capture buffer with
+        black padding; the union over frames converges to the fixed render
+        area (the padding is structurally black, so it never expands into it)."""
+        g = bgr.max(axis=2)
+        rows = np.where(g.max(axis=1) > 16)[0]
+        cols = np.where(g.max(axis=0) > 16)[0]
+        if len(rows) == 0 or len(cols) == 0:
+            return
+        x0, y0 = int(cols[0]), int(rows[0])
+        x1, y1 = int(cols[-1]) + 1, int(rows[-1]) + 1
+        if self._crop is None:
+            self._crop = [x0, y0, x1, y1]
+        else:
+            c = self._crop
+            c[0], c[1] = min(c[0], x0), min(c[1], y0)
+            c[2], c[3] = max(c[2], x1), max(c[3], y1)
+
+    # API-compatible no-op: screen capture has no V4L2 pixel-format knob.
+    def set_pixel_format(self, fmt: str):
+        pass
+
+    def run(self):
+        _screenlog(f'==== screen capture start  log={SCREEN_LOG} ====')
+        try:
+            import gi
+            gi.require_version('Gst', '1.0')
+            from gi.repository import Gst, GLib, Gio
+        except Exception as e:
+            _screenlog(f'import failed: {e}')
+            self.error.emit(f'GStreamer/PyGObject unavailable: {e}')
+            return
+
+        Gst.init(None)
+        self._Gst = Gst
+        _screenlog('Gst.init OK')
+
+        # Dispatch portal D-Bus signals on this thread's own GMainContext so we
+        # never fight Qt's glib integration on the main thread.
+        ctx = GLib.MainContext.new()
+        ctx.push_thread_default()
+        try:
+            fd, node_id = self._portal_handshake(GLib, Gio, ctx)
+
+            # videorate caps the stream to 60 fps BEFORE the (CPU-bound)
+            # videoconvert — the ScreenCast portal can push frames at the
+            # monitor's refresh (e.g. 164 Hz), and converting every one pegs a
+            # core. drop-only never duplicates, so slower sources pass through.
+            _screenlog(f'parse_launch pipewiresrc fd={fd} path={node_id}')
+            self._pipeline = Gst.parse_launch(
+                f'pipewiresrc fd={fd} path={node_id} keepalive-time=1000 '
+                f'resend-last=true ! videorate drop-only=true ! '
+                f'video/x-raw,framerate=60/1 ! '
+                f'videoconvert ! video/x-raw,format=BGRA ! '
+                f'appsink name=sink emit-signals=true max-buffers=2 drop=true sync=false'
+            )
+            sink = self._pipeline.get_by_name('sink')
+            sink.connect('new-sample', self._on_sample)
+            self._pipeline.set_state(Gst.State.PLAYING)
+            _screenlog('pipeline PLAYING')
+
+            self._loop = GLib.MainLoop.new(ctx, False)
+            self._loop.run()
+            _screenlog('loop exited')
+        except Exception as e:
+            import traceback
+            _screenlog(f'EXCEPTION: {e}\n{traceback.format_exc()}')
+            self.error.emit(f'Screen capture failed: {e}')
+        finally:
+            if self._pipeline is not None:
+                self._pipeline.set_state(Gst.State.NULL)
+            ctx.pop_thread_default()
+
+    def _on_sample(self, sink):
+        Gst = self._Gst
+        sample = sink.emit('pull-sample')
+        if sample is None:
+            return Gst.FlowReturn.OK
+        buf = sample.get_buffer()
+        s = sample.get_caps().get_structure(0)
+        w = s.get_value('width')
+        h = s.get_value('height')
+        if (w, h) != self._raw_size:    # stream resolution changed → re-detect
+            self._raw_size = (w, h)
+            self._crop = None
+            self._frame_n = 0
+        ok, info = buf.map(Gst.MapFlags.READ)
+        if not ok:
+            return Gst.FlowReturn.OK
+        try:
+            stride = len(info.data) // h          # respects PipeWire row padding
+            frame = np.frombuffer(info.data, np.uint8).reshape(h, stride)
+            bgra = frame[:, :w * 4].reshape(h, w, 4)
+
+            # Trim black padding so a low-res windowed game gets centered +
+            # height-filled instead of stuck top-left. Re-detect every 15 frames
+            # (the union only grows, converging to the fixed render area).
+            if self._autocrop:
+                if self._frame_n % 15 == 0:
+                    self._update_crop(bgra[:, :, :3])
+                self._frame_n += 1
+                if self._crop:
+                    x0, y0, x1, y1 = self._crop
+                    bgra = bgra[y0:y1, x0:x1]
+
+            ch, cw = bgra.shape[:2]
+            if (cw, ch) != self._last_size:
+                self._last_size = (cw, ch)
+                self.size_changed.emit(cw, ch)   # drive the letterbox aspect
+
+            if self._needs_downscale:
+                small = cv2.resize(bgra[:, :, :3], (DOWNSCALE_W, DOWNSCALE_H),
+                                   interpolation=cv2.INTER_NEAREST)
+                out = cv2.cvtColor(small, cv2.COLOR_BGR2BGRA)
+            else:
+                out = bgra.copy()                  # contiguous copy before unmap
+            self.frame_ready.emit(out)
+        finally:
+            buf.unmap(info)
+        return Gst.FlowReturn.OK
+
+    # ── xdg-desktop-portal ScreenCast handshake ──────────────────────────────
+    def _portal_handshake(self, GLib, Gio, ctx):
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self._bus = bus
+        sender = bus.get_unique_name()[1:].replace('.', '_')
+        self._tok = 0
+
+        PORTAL = 'org.freedesktop.portal.Desktop'
+        OBJ = '/org/freedesktop/portal/desktop'
+        SC = 'org.freedesktop.portal.ScreenCast'
+
+        def token():
+            self._tok += 1
+            return f'trinitron{self._tok}'
+
+        def do_request(method, build_body):
+            """Call a portal method that returns a Request handle, block until
+            its Response signal fires, and return the results dict."""
+            htok = token()
+            req_path = f'{OBJ}/request/{sender}/{htok}'
+            holder = {}
+            inner = GLib.MainLoop.new(ctx, False)
+            self._loop = inner
+
+            def on_response(conn, snd, path, ifc, sig, params):
+                code, results = params.unpack()
+                holder['code'] = code
+                holder['results'] = results
+                inner.quit()
+
+            sub = bus.signal_subscribe(
+                PORTAL, 'org.freedesktop.portal.Request', 'Response',
+                req_path, None, Gio.DBusSignalFlags.NONE, on_response)
+            try:
+                bus.call_sync(PORTAL, OBJ, SC, method, build_body(htok),
+                              GLib.VariantType('(o)'), Gio.DBusCallFlags.NONE,
+                              -1, None)
+                inner.run()
+            finally:
+                bus.signal_unsubscribe(sub)
+            if holder.get('code', 2) != 0:
+                raise RuntimeError(f'{method} cancelled (code {holder.get("code")})')
+            return holder['results']
+
+        # 1. CreateSession → results carry the session handle.
+        _screenlog('CreateSession…')
+        res = do_request('CreateSession', lambda htok: GLib.Variant('(a{sv})', [{
+            'handle_token':         GLib.Variant('s', htok),
+            'session_handle_token': GLib.Variant('s', token()),
+        }]))
+        session = res['session_handle']
+        _screenlog(f'session={session}')
+
+        # 2. SelectSources: types 3 = monitor|window, single source, cursor hidden.
+        _screenlog('SelectSources…')
+        do_request('SelectSources', lambda htok: GLib.Variant('(oa{sv})', [session, {
+            'handle_token': GLib.Variant('s', htok),
+            'types':        GLib.Variant('u', 3),
+            'multiple':     GLib.Variant('b', False),
+            'cursor_mode':  GLib.Variant('u', 1),
+        }]))
+
+        # 3. Start: shows the GNOME share dialog; results carry the PipeWire node.
+        _screenlog('Start (opening picker dialog)…')
+        res = do_request('Start', lambda htok: GLib.Variant('(osa{sv})', [session, '', {
+            'handle_token': GLib.Variant('s', htok),
+        }]))
+        streams = res.get('streams') or []
+        _screenlog(f'Start returned streams={streams}')
+        if not streams:
+            raise RuntimeError('no window/screen was selected')
+        node_id = streams[0][0]
+
+        # 4. OpenPipeWireRemote: direct call returning a Unix fd (not a Request).
+        _screenlog('OpenPipeWireRemote…')
+        var, fd_list = bus.call_with_unix_fd_list_sync(
+            PORTAL, OBJ, SC, 'OpenPipeWireRemote',
+            GLib.Variant('(oa{sv})', [session, {}]),
+            GLib.VariantType('(h)'), Gio.DBusCallFlags.NONE, -1, None, None)
+        fd = fd_list.get(var.unpack()[0])
+        _screenlog(f'pipewire fd={fd} node={node_id}')
+        return fd, node_id
+
+    def stop(self):
+        if self._loop is not None:
+            self._loop.quit()
+        self.wait()
 
 class AudioPassthrough:
     def __init__(self, input_device: int):
@@ -477,7 +727,6 @@ class AudioPassthrough:
 class WgpuRenderer(WgpuWidget):
     fps_updated = pyqtSignal(str)
     initialized = pyqtSignal()
-    lsfg_detected = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -511,7 +760,8 @@ class WgpuRenderer(WgpuWidget):
         self._fps_timer = time.time()
         self._initialized = False
         self._swapchain_fmt = 'bgra8unorm'
-        self._lsfg_active = False
+        self._dbg_screen = False   # log letterbox numbers for screen-capture debug
+        self._dbg_n = 0
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -533,16 +783,12 @@ class WgpuRenderer(WgpuWidget):
             fps = self._frame_count / elapsed
             self._frame_count = 0
             self._fps_timer = time.time()
-            if self._lsfg_active:
-                mult = _lsfg_multiplier()
-                self.fps_updated.emit(f'{fps:.0f}→{fps * mult:.0f} FPS')
-            else:
-                self.fps_updated.emit(f'{fps:.0f} FPS')
+            self.fps_updated.emit(f'{fps:.0f} FPS')
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 
     def _rc_get_present_info(self, present_methods):
-        """Force Vulkan screen present so LSFG-VK can intercept vkQueuePresentKHR."""
+        """Use a native Vulkan screen-present surface for low-latency output."""
         if 'screen' in present_methods:
             surface_ids = self._get_surface_ids()
             if surface_ids:
@@ -573,11 +819,6 @@ class WgpuRenderer(WgpuWidget):
                     break
                 except Exception:
                     continue
-
-            # Detect LSFG-VK: after Vulkan is loaded, its layer .so appears in /proc/self/maps
-            self._lsfg_active = _lsfg_loaded()
-            print(f'LSFG-VK detected: {self._lsfg_active}')
-            self.lsfg_detected.emit(self._lsfg_active)
 
             self._sampler = device.create_sampler(
                 min_filter='linear', mag_filter='linear',
@@ -828,13 +1069,24 @@ class WgpuRenderer(WgpuWidget):
         rp1.end()
 
         # ── Pass 2: post → swapchain with letterbox ───────────────────────
-        sw, sh = self.width(), self.height()
+        # Letterbox in the swapchain's OWN pixel space (get_current_texture),
+        # not self.width()/height(): the native Vulkan surface size can differ
+        # from the Qt logical widget size, which would offset the viewport and
+        # leave black margins.
+        current_tex = self._ctx.get_current_texture()
+        sw, sh = current_tex.size[0], current_tex.size[1]
         if sw <= 0 or sh <= 0:
             device.queue.submit([cmd.finish()])
             return
         vx, vy, vw, vh = self._letterbox(sw, sh)
 
-        current_tex = self._ctx.get_current_texture()
+        if self._dbg_screen and self._dbg_n % 120 == 0:
+            fh, fw = frame.shape[:2]
+            _screenlog(f'[draw] frame={fw}x{fh} aspect={self._aspect} '
+                       f'swapchain={sw}x{sh} widget={self.width()}x{self.height()} '
+                       f'letterbox=({vx},{vy},{vw},{vh}) filter={filter_name}')
+        self._dbg_n += 1
+
         sc_view = current_tex.create_view()
         rp2 = cmd.begin_render_pass(color_attachments=[{
             'view': sc_view,
@@ -891,7 +1143,8 @@ class SidebarPanel(QWidget):
             lambda i: self.filter_changed.emit(self._filter_combo.itemData(i)))
         layout.addWidget(self._filter_combo)
 
-        layout.addWidget(QLabel('Capture Format'))
+        self._fmt_label = QLabel('Capture Format')
+        layout.addWidget(self._fmt_label)
         self._fmt_combo = QComboBox()
         for label, fmt in CAPTURE_FORMATS.items():
             self._fmt_combo.addItem(label, fmt)
@@ -899,7 +1152,8 @@ class SidebarPanel(QWidget):
             lambda i: self.format_changed.emit(self._fmt_combo.itemData(i)))
         layout.addWidget(self._fmt_combo)
 
-        layout.addWidget(QLabel('Volume'))
+        self._vol_label = QLabel('Volume')
+        layout.addWidget(self._vol_label)
         self._vol_slider = QSlider(Qt.Horizontal)
         self._vol_slider.setRange(0, 100)
         self._vol_slider.setValue(80)
@@ -908,6 +1162,12 @@ class SidebarPanel(QWidget):
         layout.addWidget(self._vol_slider)
 
         layout.addStretch()
+
+    def set_screen_mode(self):
+        """Screen capture has no V4L2 format and no audio — hide those controls."""
+        for w in (self._fmt_label, self._fmt_combo,
+                  self._vol_label, self._vol_slider):
+            w.setVisible(False)
 
 # ─── Overlay window ───────────────────────────────────────────────────────────
 
@@ -964,15 +1224,15 @@ class OverlayWindow(QWidget):
 # ─── Viewer page ──────────────────────────────────────────────────────────────
 
 class ViewerPage(QWidget):
-    def __init__(self, camera_path: str, mic_idx: int, parent=None):
+    def __init__(self, source: str, device: str, mic_idx: int, parent=None):
         super().__init__(parent)
         self.setStyleSheet('background: black;')
+        self._source = source
 
         self._gl = WgpuRenderer(self)
         self._gl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._gl.fps_updated.connect(self._on_fps)
         self._gl.initialized.connect(self._on_renderer_init)
-        self._gl.lsfg_detected.connect(self._on_lsfg_detected)
 
         # Transparent overlay window for all HUD widgets
         self._overlay = OverlayWindow(self, self._show_ui)
@@ -1024,10 +1284,25 @@ class ViewerPage(QWidget):
         self._fs_btn.setStyleSheet(_btn_style)
         self._fs_btn.clicked.connect(self._on_fullscreen)
 
-        # Capture thread
-        self._capture = CaptureThread(camera_path)
+        # Capture thread — webcam (V4L2) or game window (Wayland screen capture)
+        if source == 'screen':
+            self._capture = ScreenCaptureThread()
+            self._capture.error.connect(self._on_capture_error)
+            # Fit the captured content: letterbox to its own aspect (centered,
+            # height-filling) instead of the fixed Console aspect. Bound method
+            # (QObject receiver) → runs on the GUI thread via a queued connection.
+            self._capture.size_changed.connect(self._on_screen_size)
+            self._gl._dbg_screen = True
+            # Screen capture has no pixel format / mic / volume — hide those.
+            self._sidebar.set_screen_mode()
+        else:
+            self._capture = CaptureThread(device)
         self._capture.frame_ready.connect(self._gl.on_frame)
-        self._capture.start()
+        # Start capture only AFTER wgpu/Vulkan finishes initializing. Starting
+        # the screen-capture thread (Gst.init + Wayland portal) concurrently with
+        # wgpu surface creation races on the (non-thread-safe) Wayland display
+        # and segfaults. Deferring serializes the two GPU/Wayland inits.
+        self._capture_started = False
 
         # Audio
         self._audio = None
@@ -1050,6 +1325,9 @@ class ViewerPage(QWidget):
     def _on_renderer_init(self):
         self._overlay.sync()
         self._overlay.show()
+        if not self._capture_started:
+            self._capture_started = True
+            self._capture.start()
 
     def _on_fps(self, text: str):
         self._fps_label.setText(text)
@@ -1071,11 +1349,14 @@ class ViewerPage(QWidget):
         self._waiting_label.setVisible(True)
         self._capture.set_pixel_format(fmt)
 
-    def _on_lsfg_detected(self, active: bool):
-        if active:
-            print('LSFG-VK active — switching capture fps')
-            # is_mjpeg = options.get('input_format') == 'mjpeg' #'60' if is_mjpeg else '30'
-            self._capture.set_framerate('30')
+    def _on_capture_error(self, msg: str):
+        print(msg, flush=True)
+        self._waiting_label.setText(msg)
+        self._waiting_label.setVisible(True)
+
+    def _on_screen_size(self, w: int, h: int):
+        _screenlog(f'[size] captured frame {w}x{h} → set_aspect')
+        self._gl.set_aspect((w, h))
 
     def _on_volume(self, vol: float):
         if self._audio:
@@ -1132,7 +1413,7 @@ class ViewerPage(QWidget):
 # ─── Setup page ───────────────────────────────────────────────────────────────
 
 class SetupPage(QWidget):
-    start_requested = pyqtSignal(str, int)
+    start_requested = pyqtSignal(str, str, int)  # source ('camera'|'screen'), device, mic_idx
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1156,7 +1437,15 @@ class SetupPage(QWidget):
         title.setAlignment(Qt.AlignCenter)
         inner.addWidget(title)
 
-        inner.addWidget(QLabel('Camera:'))
+        inner.addWidget(QLabel('Source:'))
+        self._src_combo = QComboBox()
+        self._src_combo.addItem('Camera', 'camera')
+        self._src_combo.addItem('Game window (screen capture)', 'screen')
+        self._src_combo.currentIndexChanged.connect(self._on_source_changed)
+        inner.addWidget(self._src_combo)
+
+        self._cam_label = QLabel('Camera:')
+        inner.addWidget(self._cam_label)
         self._cam_combo = QComboBox()
         cameras = enumerate_cameras()
         if cameras:
@@ -1166,7 +1455,8 @@ class SetupPage(QWidget):
             self._cam_combo.addItem('No camera found', '')
         inner.addWidget(self._cam_combo)
 
-        inner.addWidget(QLabel('Microphone:'))
+        self._mic_label = QLabel('Microphone:')
+        inner.addWidget(self._mic_label)
         self._mic_combo = QComboBox()
         self._mic_combo.addItem('No audio', -1)
         for label, idx in enumerate_mics():
@@ -1184,11 +1474,23 @@ class SetupPage(QWidget):
 
         outer.addWidget(card, alignment=Qt.AlignCenter)
 
+    def _on_source_changed(self):
+        is_cam = self._src_combo.currentData() == 'camera'
+        # Screen capture picks its target in the portal dialog → hide camera combo,
+        # and has no audio → hide the mic picker.
+        self._cam_label.setVisible(is_cam)
+        self._cam_combo.setVisible(is_cam)
+        self._mic_label.setVisible(is_cam)
+        self._mic_combo.setVisible(is_cam)
+
     def _on_start(self):
-        cam_path = self._cam_combo.currentData()
+        source = self._src_combo.currentData()
+        cam_path = self._cam_combo.currentData() or ''
         mic_idx = self._mic_combo.currentData()
-        if cam_path:
-            self.start_requested.emit(cam_path, mic_idx if mic_idx is not None else -1)
+        mic_idx = mic_idx if mic_idx is not None else -1
+        if source == 'camera' and not cam_path:
+            return
+        self.start_requested.emit(source, cam_path, mic_idx)
 
 # ─── Main window ──────────────────────────────────────────────────────────────
 
@@ -1207,10 +1509,10 @@ class MainWindow(QMainWindow):
         self._viewer: ViewerPage | None = None
         self.showMaximized()
 
-    def _on_start(self, cam_path: str, mic_idx: int):
+    def _on_start(self, source: str, device: str, mic_idx: int):
         if self._viewer is not None:
             return  # guard against double-click / duplicate signal
-        self._viewer = ViewerPage(cam_path, mic_idx)
+        self._viewer = ViewerPage(source, device, mic_idx)
         self._stack.addWidget(self._viewer)
         self._stack.setCurrentWidget(self._viewer)
 
