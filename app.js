@@ -1,3 +1,6 @@
+const sourceSelect = document.getElementById('sourceSelect');
+const cameraRow = document.getElementById('cameraRow');
+const micRow = document.getElementById('micRow');
 const cameraSelect = document.getElementById('cameraSelect');
 const micSelect = document.getElementById('micSelect');
 const aspect = document.getElementById('ratio');
@@ -205,12 +208,20 @@ async function startStream() {
 	try {
 		if (videoStream) videoStream.getTracks().forEach(t => t.stop());
 		if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+		audioStream = undefined;
 
-		videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
-		audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+		if (sourceSelect.value === 'screen') {
+			videoStream = await navigator.mediaDevices.getDisplayMedia({
+				video: { frameRate: { ideal: 60, max: 60 } },
+				audio: false
+			});
+		} else {
+			videoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+			audioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+		}
 
 		video.srcObject = videoStream;
-		audio.srcObject = audioStream;
+		if (audioStream) audio.srcObject = audioStream;
 
 		video.onloadedmetadata = () => {
 			video.play();
@@ -376,6 +387,12 @@ function startRenderLoop() {
 
 	requestAnimationFrame(render);
 }
+
+sourceSelect.addEventListener('change', () => {
+	const isScreen = sourceSelect.value === 'screen';
+	cameraRow.style.display = isScreen ? 'none' : 'block';
+	micRow.style.display = isScreen ? 'none' : 'block';
+});
 
 startBtn.onclick = () => {
 	startStream();

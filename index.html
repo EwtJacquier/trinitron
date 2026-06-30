@@ -9,10 +9,16 @@
 
 <body>
 	<div id="menu">
-		<label>Camera:
+		<label>Source:
+			<select id="sourceSelect">
+				<option value="camera">Camera</option>
+				<option value="screen">Tela ou Janela</option>
+			</select>
+		</label><br>
+		<label id="cameraRow">Camera:
 			<select id="cameraSelect"></select>
 		</label><br>
-		<label>Microphone:
+		<label id="micRow">Microphone:
 			<select id="micSelect"></select>
 		</label><br>
 		<button id="startBtn">Start</button>
