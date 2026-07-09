@@ -27,34 +27,39 @@
 	<button id="fullscreenBtn" style="display:none;">⛶</button>
 	<button id="sidebarToggle" style="display:none;">&#9776;</button>
 	<div id="sidebar" style="display:none;">
-		<label>Console:
-			<select id="ratio">
-				<option value="fullhd">Full HD</option>
-				<option value="snesanalogue">Super Nintendo</option>
-				<option value="n64retroscaler2x">Nintendo 64</option>
-				<option value="ps1retroscaler2x">PS1</option>
-				<option value="ps2retroscaler2x">PS2</option>
-			</select>
-		</label><br>
-		<label>Filter:
-			<select id="filter">
-				<option value="original">Original (Passthrough)</option>
-				<option value="downscale">Downscale (480p)</option>
-				<option value="crt">CRT Blend (480p -&gt; 1080p)</option>
-				<option value="crtgrainy">CRT Blend + Grainy (480p -&gt; 1080p)</option>
-				<option value="blurrycrt">CRT Blend + Blurry (480p -&gt; 1080p)</option>
-				<option value="blurrygrainycrt">CRT Blend + Blurry + Grainy (480p -&gt; 1080p)</option>
-				<option value="sharpen">Sharpen 3D (480p -&gt; 1080p)</option>
-				<option value="grainy">Sharpen 3D + Grainy (480p -&gt; 1080p)</option>
-			</select>
-		</label><br>
-		<label>Volume:
-			<input type="range" id="volume" min="0" max="1" step="0.01" value="1">
-		</label>
+		<div class="tabs">
+			<button class="tab-btn active" data-tab="video">Vídeo</button>
+			<button class="tab-btn" data-tab="translate">Tradução</button>
+		</div>
 
-		<hr class="sidebar-sep">
-		<div id="translateSection">
-			<strong class="sidebar-title">Tradução (Gemini)</strong>
+		<div class="tab-panel active" data-panel="video">
+			<label>Console:
+				<select id="ratio">
+					<option value="fullhd">Full HD</option>
+					<option value="snesanalogue">Super Nintendo</option>
+					<option value="n64retroscaler2x">Nintendo 64</option>
+					<option value="ps1retroscaler2x">PS1</option>
+					<option value="ps2retroscaler2x">PS2</option>
+				</select>
+			</label>
+			<label>Filter:
+				<select id="filter">
+					<option value="original">Original (Passthrough)</option>
+					<option value="downscale">Downscale (480p)</option>
+					<option value="crt">CRT Blend (480p -&gt; 1080p)</option>
+					<option value="crtgrainy">CRT Blend + Grainy (480p -&gt; 1080p)</option>
+					<option value="blurrycrt">CRT Blend + Blurry (480p -&gt; 1080p)</option>
+					<option value="blurrygrainycrt">CRT Blend + Blurry + Grainy (480p -&gt; 1080p)</option>
+					<option value="sharpen">Sharpen 3D (480p -&gt; 1080p)</option>
+					<option value="grainy">Sharpen 3D + Grainy (480p -&gt; 1080p)</option>
+				</select>
+			</label>
+			<label>Volume:
+				<input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+			</label>
+		</div>
+
+		<div class="tab-panel" data-panel="translate">
 			<label>Chave da API:
 				<input type="password" id="geminiKey" placeholder="Cole sua chave do Google AI Studio" autocomplete="off">
 			</label>
@@ -66,23 +71,37 @@
 			</label>
 			<button id="translateBtn">Traduzir tela</button>
 			<button id="translateClearBtn">Limpar tradução</button>
-			<label>Cor da fonte:
-				<input type="color" id="transFontColor" value="#ffffff">
+
+			<hr class="sidebar-sep">
+			<strong class="sidebar-title">Aparência</strong>
+			<label class="inline-check">
+				<input type="checkbox" id="transPanelMode"> Mostrar em painel lateral (esquerda)
 			</label>
-			<label>Cor do fundo:
-				<input type="color" id="transBgColor" value="#000000">
+			<label>Fonte:
+				<select id="transFont">
+					<option value="sans-serif">Padrão (sem serifa)</option>
+					<option value="serif">Serifada</option>
+					<option value="monospace">Monoespaçada</option>
+					<option value="Arial, sans-serif">Arial</option>
+					<option value="Verdana, sans-serif">Verdana</option>
+					<option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+					<option value="Georgia, serif">Georgia</option>
+					<option value="'Times New Roman', serif">Times New Roman</option>
+					<option value="Impact, sans-serif">Impact</option>
+					<option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+				</select>
+			</label>
+			<label>Combinação de cores:
+				<select id="transPreset"></select>
 			</label>
 			<label>Opacidade do fundo:
 				<input type="range" id="transBgOpacity" min="0" max="1" step="0.05" value="0.75">
 			</label>
-			<label class="inline-check">
-				<input type="checkbox" id="autoTranslate"> Auto-tradução (detecta texto)
+			<label>Espessura da borda: <span id="transBorderVal">0</span>
+				<input type="range" id="transBorderWidth" min="0" max="6" step="0.5" value="0">
 			</label>
-			<label>Sensibilidade:
-				<input type="range" id="autoSensitivity" min="0" max="1" step="0.05" value="0.5">
-			</label>
-			<label>Intervalo mínimo (s): <span id="autoIntervalVal">4</span>
-				<input type="range" id="autoInterval" min="1" max="20" step="1" value="4">
+			<label>Esconder após (s): <span id="transHideVal">0</span> <small>(0 = nunca)</small>
+				<input type="range" id="transHideAfter" min="0" max="30" step="1" value="0">
 			</label>
 			<div id="translateStatus"></div>
 		</div>
@@ -94,6 +113,7 @@
 		<canvas id="canvas" width="2562" height="1440"></canvas>
 		<div id="translationOverlay"></div>
 	</div>
+	<div id="translationPanel" style="display:none;"></div>
 	<div id="fps">FPS: 0</div>
 
 	<script src="app.js"></script>
