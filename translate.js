@@ -3,25 +3,34 @@
 // Gemini numa chamada só, e desenha um overlay configurável sobre o canvas.
 
 (function () {
-	const GEMINI_MODEL = 'gemini-2.0-flash';
+	const DEFAULT_MODEL = 'gemini-flash-latest'; // alias sempre atual → não quebra em deprecações
 	const MAX_CAPTURE_WIDTH = 1280; // reduz payload/custo sem perder legibilidade
 	const LS = {
 		key: 'trinitron.geminiKey',
+		model: 'trinitron.geminiModel',
 		enabled: 'trinitron.translateEnabled',
 		fontColor: 'trinitron.transFontColor',
 		bgColor: 'trinitron.transBgColor',
-		bgOpacity: 'trinitron.transBgOpacity'
+		bgOpacity: 'trinitron.transBgOpacity',
+		auto: 'trinitron.autoTranslate',
+		sensitivity: 'trinitron.autoSensitivity',
+		interval: 'trinitron.autoInterval'
 	};
 
 	const video = document.getElementById('video');
 	const overlay = document.getElementById('translationOverlay');
 	const keyInput = document.getElementById('geminiKey');
+	const modelInput = document.getElementById('geminiModel');
 	const enabledInput = document.getElementById('translateEnabled');
 	const translateBtn = document.getElementById('translateBtn');
 	const clearBtn = document.getElementById('translateClearBtn');
 	const fontColorInput = document.getElementById('transFontColor');
 	const bgColorInput = document.getElementById('transBgColor');
 	const bgOpacityInput = document.getElementById('transBgOpacity');
+	const autoInput = document.getElementById('autoTranslate');
+	const sensitivityInput = document.getElementById('autoSensitivity');
+	const intervalInput = document.getElementById('autoInterval');
+	const intervalValEl = document.getElementById('autoIntervalVal');
 	const statusEl = document.getElementById('translateStatus');
 
 	let busy = false;
@@ -30,17 +39,26 @@
 	// ── Persistência simples no navegador ────────────────────────────────────
 	function loadPrefs() {
 		keyInput.value = localStorage.getItem(LS.key) || '';
+		modelInput.value = localStorage.getItem(LS.model) || DEFAULT_MODEL;
 		enabledInput.checked = localStorage.getItem(LS.enabled) === 'true';
 		fontColorInput.value = localStorage.getItem(LS.fontColor) || '#ffffff';
 		bgColorInput.value = localStorage.getItem(LS.bgColor) || '#000000';
 		bgOpacityInput.value = localStorage.getItem(LS.bgOpacity) || '0.75';
+		autoInput.checked = localStorage.getItem(LS.auto) === 'true';
+		sensitivityInput.value = localStorage.getItem(LS.sensitivity) || '0.5';
+		intervalInput.value = localStorage.getItem(LS.interval) || '4';
+		intervalValEl.textContent = intervalInput.value;
 	}
 
 	keyInput.addEventListener('change', () => localStorage.setItem(LS.key, keyInput.value.trim()));
+	modelInput.addEventListener('change', () => localStorage.setItem(LS.model, modelInput.value.trim()));
 	enabledInput.addEventListener('change', () => localStorage.setItem(LS.enabled, enabledInput.checked));
 	fontColorInput.addEventListener('input', () => { localStorage.setItem(LS.fontColor, fontColorInput.value); renderOverlay(lastItems); });
 	bgColorInput.addEventListener('input', () => { localStorage.setItem(LS.bgColor, bgColorInput.value); renderOverlay(lastItems); });
 	bgOpacityInput.addEventListener('input', () => { localStorage.setItem(LS.bgOpacity, bgOpacityInput.value); renderOverlay(lastItems); });
+	autoInput.addEventListener('change', () => { localStorage.setItem(LS.auto, autoInput.checked); resetDetector(); });
+	sensitivityInput.addEventListener('input', () => localStorage.setItem(LS.sensitivity, sensitivityInput.value));
+	intervalInput.addEventListener('input', () => { localStorage.setItem(LS.interval, intervalInput.value); intervalValEl.textContent = intervalInput.value; });
 
 	function setStatus(msg, isError) {
 		statusEl.textContent = msg || '';
@@ -86,7 +104,8 @@
 
 	async function callGemini(dataUrl, apiKey) {
 		const base64 = dataUrl.split(',')[1];
-		const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+		const model = modelInput.value.trim() || DEFAULT_MODEL;
+		const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 		const body = {
 			contents: [{
 				parts: [
@@ -167,7 +186,7 @@
 		if (!frame) { setStatus('Sem vídeo pra capturar.', true); return; }
 
 		busy = true;
-		setStatus('🌐 Traduzindo…');
+		setStatus('Traduzindo…');
 		try {
 			const items = await callGemini(frame, apiKey);
 			lastItems = Array.isArray(items) ? items : [];
@@ -180,6 +199,118 @@
 			busy = false;
 		}
 	}
+
+	// ── Detector heurístico local (sem IA) ───────────────────────────────────
+	// Trabalha numa versão minúscula do frame em tons de cinza. Decide QUANDO
+	// disparar o Gemini: espera a cena mudar e depois ESTABILIZAR (caixa de
+	// diálogo terminou de escrever) e só então traduz — uma vez por conteúdo.
+	const DET_W = 192, DET_H = 108;   // resolução de análise
+	const GRID_X = 24, GRID_Y = 14;   // fingerprint grosseiro p/ detectar mudança
+	const SAMPLE_MS = 350;            // frequência de amostragem
+	const REQUIRED_STABLE = 2;        // amostras estáveis antes de disparar
+	const CHANGE_THRESH = 6;          // diff média por célula (0–255) = "mudou"
+
+	let detCanvas = null, detCtx = null;
+	let prevGrid = null;              // fingerprint da amostra anterior
+	let translatedGrid = null;        // fingerprint do que já foi traduzido
+	let stableCount = 0;
+	let dirty = false;                // há conteúdo novo ainda não traduzido
+	let lastAutoCall = 0;
+
+	function resetDetector() {
+		prevGrid = null;
+		translatedGrid = null;
+		stableCount = 0;
+		dirty = false;
+	}
+
+	// Extrai o fingerprint (grade de luminância) e um "textScore" (densidade de
+	// bordas horizontais — texto gera muitas transições nítidas e pequenas).
+	function analyzeFrame() {
+		if (!detCanvas) {
+			detCanvas = document.createElement('canvas');
+			detCanvas.width = DET_W; detCanvas.height = DET_H;
+			detCtx = detCanvas.getContext('2d', { willReadFrequently: true });
+		}
+		detCtx.drawImage(video, 0, 0, DET_W, DET_H);
+		const data = detCtx.getImageData(0, 0, DET_W, DET_H).data;
+
+		const gray = new Uint8Array(DET_W * DET_H);
+		for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+			gray[p] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+		}
+
+		// Grade de luminância média por célula.
+		const grid = new Float32Array(GRID_X * GRID_Y);
+		const counts = new Int32Array(GRID_X * GRID_Y);
+		for (let y = 0; y < DET_H; y++) {
+			const gy = (y * GRID_Y / DET_H) | 0;
+			for (let x = 0; x < DET_W; x++) {
+				const gx = (x * GRID_X / DET_W) | 0;
+				const c = gy * GRID_X + gx;
+				grid[c] += gray[y * DET_W + x];
+				counts[c]++;
+			}
+		}
+		for (let c = 0; c < grid.length; c++) grid[c] /= counts[c] || 1;
+
+		// textScore: fração de pixels com gradiente horizontal forte.
+		let strong = 0;
+		for (let y = 0; y < DET_H; y++) {
+			for (let x = 1; x < DET_W; x++) {
+				const d = Math.abs(gray[y * DET_W + x] - gray[y * DET_W + x - 1]);
+				if (d > 40) strong++;
+			}
+		}
+		const textScore = strong / (DET_W * DET_H);
+		return { grid, textScore };
+	}
+
+	function gridDiff(a, b) {
+		if (!a || !b) return Infinity;
+		let sum = 0;
+		for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+		return sum / a.length;
+	}
+
+	function detectorTick() {
+		if (!autoInput.checked || busy) return;
+		if (video.readyState < 2 || !video.videoWidth) return;
+
+		const { grid, textScore } = analyzeFrame();
+		const changed = gridDiff(grid, prevGrid) > CHANGE_THRESH;
+		prevGrid = grid;
+
+		if (changed) {           // cena mudando → espera estabilizar
+			stableCount = 0;
+			dirty = true;
+			return;
+		}
+		if (!dirty) return;      // cena estática já tratada
+
+		// Sensibilidade (0–1) → limiar de textScore (alto = dispara mais fácil).
+		const threshold = (1 - parseFloat(sensitivityInput.value)) * 0.22 + 0.015;
+		if (textScore < threshold) return;
+
+		// Mesmo conteúdo já traduzido? não redispara.
+		if (translatedGrid && gridDiff(grid, translatedGrid) < CHANGE_THRESH) {
+			dirty = false;
+			return;
+		}
+
+		if (++stableCount < REQUIRED_STABLE) return;
+
+		const now = performance.now();
+		if (now - lastAutoCall < parseFloat(intervalInput.value) * 1000) return;
+
+		lastAutoCall = now;
+		translatedGrid = grid;
+		dirty = false;
+		stableCount = 0;
+		translateScreen();
+	}
+
+	setInterval(detectorTick, SAMPLE_MS);
 
 	// ── Disparos: botão + tecla T ────────────────────────────────────────────
 	translateBtn.addEventListener('click', translateScreen);
