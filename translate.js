@@ -13,6 +13,7 @@
 		panelMode: 'trinitron.transPanelMode',
 		font: 'trinitron.transFont',
 		preset: 'trinitron.transPreset',
+		fontScale: 'trinitron.transFontScale',
 		bgOpacity: 'trinitron.transBgOpacity',
 		borderWidth: 'trinitron.transBorderWidth',
 		hideAfter: 'trinitron.transHideAfter'
@@ -37,20 +38,27 @@
 	const modelInput = document.getElementById('geminiModel');
 	const enabledInput = document.getElementById('translateEnabled');
 	const translateBtn = document.getElementById('translateBtn');
+	const peekBtn = document.getElementById('translatePeekBtn');
 	const clearBtn = document.getElementById('translateClearBtn');
 	const panelModeInput = document.getElementById('transPanelMode');
 	const fontInput = document.getElementById('transFont');
 	const presetInput = document.getElementById('transPreset');
+	const fontScaleInput = document.getElementById('transFontScale');
+	const fontScaleValEl = document.getElementById('transFontScaleVal');
 	const bgOpacityInput = document.getElementById('transBgOpacity');
 	const borderWidthInput = document.getElementById('transBorderWidth');
 	const borderValEl = document.getElementById('transBorderVal');
 	const hideAfterInput = document.getElementById('transHideAfter');
 	const hideValEl = document.getElementById('transHideVal');
 	const statusEl = document.getElementById('translateStatus');
+	const indicator = document.getElementById('translateIndicator');
 
 	let busy = false;
 	let lastItems = [];
 	let hideTimer = null;
+	let visible = false;   // tradução atualmente na tela?
+	let peeking = false;   // botão "segurar para ver" pressionado?
+	let wasVisible = false;
 
 	PRESETS.forEach(p => {
 		const o = document.createElement('option');
@@ -80,6 +88,8 @@
 		panelModeInput.checked = localStorage.getItem(LS.panelMode) === 'true';
 		fontInput.value = localStorage.getItem(LS.font) || 'sans-serif';
 		presetInput.value = localStorage.getItem(LS.preset) || 'classico';
+		fontScaleInput.value = localStorage.getItem(LS.fontScale) || '0.8';
+		fontScaleValEl.textContent = fontScaleInput.value;
 		bgOpacityInput.value = localStorage.getItem(LS.bgOpacity) || '0.75';
 		borderWidthInput.value = localStorage.getItem(LS.borderWidth) || '0';
 		borderValEl.textContent = borderWidthInput.value;
@@ -88,7 +98,7 @@
 	}
 
 	function save(key, val) { localStorage.setItem(key, val); }
-	function rerender() { render(lastItems); }
+	function rerender() { if (visible) render(lastItems); }
 
 	keyInput.addEventListener('change', () => save(LS.key, keyInput.value.trim()));
 	modelInput.addEventListener('change', () => save(LS.model, modelInput.value.trim()));
@@ -96,6 +106,7 @@
 	panelModeInput.addEventListener('change', () => { save(LS.panelMode, panelModeInput.checked); rerender(); });
 	fontInput.addEventListener('change', () => { save(LS.font, fontInput.value); rerender(); });
 	presetInput.addEventListener('change', () => { save(LS.preset, presetInput.value); rerender(); });
+	fontScaleInput.addEventListener('input', () => { save(LS.fontScale, fontScaleInput.value); fontScaleValEl.textContent = fontScaleInput.value; rerender(); });
 	bgOpacityInput.addEventListener('input', () => { save(LS.bgOpacity, bgOpacityInput.value); rerender(); });
 	borderWidthInput.addEventListener('input', () => { save(LS.borderWidth, borderWidthInput.value); borderValEl.textContent = borderWidthInput.value; rerender(); });
 	hideAfterInput.addEventListener('input', () => { save(LS.hideAfter, hideAfterInput.value); hideValEl.textContent = hideAfterInput.value; });
@@ -237,19 +248,21 @@
 	}
 
 	// Reduz a fonte até o texto caber na caixa (largura + altura com folga).
-	// Resolve o problema de fontes grandes transbordando o box após traduzir.
+	// A escala (slider) multiplica o tamanho inicial; o loop garante que caiba.
 	function fitText(el, boxW, boxH) {
-		const maxH = boxH * 1.8; // deixa crescer um pouco: PT costuma ser mais longo
-		let fs = Math.min(46, Math.max(11, boxH * 0.85));
+		const scale = parseFloat(fontScaleInput.value) || 0.8;
+		const maxH = boxH * 1.4; // deixa crescer um pouco: PT costuma ser mais longo
+		let fs = Math.max(8, Math.min(34, boxH * 0.6) * scale);
 		el.style.fontSize = fs + 'px';
 		let guard = 60;
-		while (fs > 9 && guard-- > 0 && (el.scrollWidth > boxW + 1 || el.scrollHeight > maxH + 1)) {
+		while (fs > 8 && guard-- > 0 && (el.scrollWidth > boxW + 1 || el.scrollHeight > maxH + 1)) {
 			fs -= 1;
 			el.style.fontSize = fs + 'px';
 		}
 	}
 
 	function renderPanel(items) {
+		const scale = parseFloat(fontScaleInput.value) || 0.8;
 		for (const it of items) {
 			const item = document.createElement('div');
 			item.className = 'panel-item';
@@ -257,11 +270,13 @@
 			if (it.original) {
 				const src = document.createElement('span');
 				src.className = 'panel-src';
+				src.style.fontSize = (13 * scale) + 'px';
 				src.textContent = it.original;
 				item.appendChild(src);
 			}
 			const pt = document.createElement('span');
 			pt.className = 'panel-pt';
+			pt.style.fontSize = (22 * scale) + 'px';
 			pt.textContent = it.pt;
 			styleText(pt);
 			item.appendChild(pt);
@@ -269,19 +284,48 @@
 		}
 	}
 
-	function clearTranslation() {
-		clearTimeout(hideTimer);
-		lastItems = [];
+	function showTranslation() {
+		visible = true;
+		render(lastItems);
+	}
+
+	// Esconde da tela, mas MANTÉM lastItems (dá pra reespiar com "Segurar para ver").
+	function hideTranslation() {
+		visible = false;
 		overlay.innerHTML = '';
 		panel.innerHTML = '';
 		panel.style.display = 'none';
+	}
+
+	// "Limpar": esquece a última tradução de vez.
+	function clearTranslation() {
+		clearTimeout(hideTimer);
+		peeking = false;
+		lastItems = [];
+		hideTranslation();
 		setStatus('');
 	}
 
 	function scheduleHide() {
 		clearTimeout(hideTimer);
 		const secs = parseInt(hideAfterInput.value, 10) || 0;
-		if (secs > 0 && lastItems.length) hideTimer = setTimeout(clearTranslation, secs * 1000);
+		if (secs > 0) hideTimer = setTimeout(hideTranslation, secs * 1000);
+	}
+
+	// Segurar o botão mostra a última tradução; soltar restaura o estado anterior.
+	function startPeek(e) {
+		if (e) e.preventDefault();
+		if (!lastItems.length) { setStatus('Nada traduzido ainda.', true); return; }
+		peeking = true;
+		wasVisible = visible;
+		clearTimeout(hideTimer);
+		showTranslation();
+	}
+
+	function endPeek() {
+		if (!peeking) return;
+		peeking = false;
+		if (!wasVisible) hideTranslation();
 	}
 
 	// ── Fluxo principal ──────────────────────────────────────────────────────
@@ -294,10 +338,11 @@
 
 		busy = true;
 		setStatus('Traduzindo…');
+		indicator.style.display = 'flex';
 		try {
 			const items = await callGemini(frame, apiKey);
 			lastItems = Array.isArray(items) ? items : [];
-			render(lastItems);
+			showTranslation();
 			setStatus(lastItems.length ? `${lastItems.length} bloco(s) traduzido(s).` : 'Nenhum texto detectado.');
 			scheduleHide();
 		} catch (err) {
@@ -305,12 +350,22 @@
 			setStatus('Erro: ' + err.message, true);
 		} finally {
 			busy = false;
+			indicator.style.display = 'none';
 		}
 	}
 
 	// ── Disparos: botão + tecla T (sem worker automático) ────────────────────
 	translateBtn.addEventListener('click', translateScreen);
 	clearBtn.addEventListener('click', clearTranslation);
+
+	// "Segurar para ver": mostra enquanto pressionado, esconde ao soltar.
+	peekBtn.addEventListener('mousedown', startPeek);
+	peekBtn.addEventListener('touchstart', startPeek, { passive: false });
+	document.addEventListener('mouseup', endPeek);
+	peekBtn.addEventListener('touchend', endPeek);
+	peekBtn.addEventListener('touchcancel', endPeek);
+	// Evita que o clique conte como "arrastar seleção" e trave o peek.
+	peekBtn.addEventListener('dragstart', (e) => e.preventDefault());
 
 	document.addEventListener('keydown', (e) => {
 		const tag = (e.target.tagName || '').toLowerCase();

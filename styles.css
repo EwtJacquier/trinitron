@@ -318,3 +318,38 @@ button {
 	font-size: 18px;
 	font-weight: 600;
 }
+
+/* ── Indicador de "traduzindo" na tela ───────────────────────────── */
+#translateIndicator {
+	position: fixed;
+	bottom: 24px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 30;
+	background: rgba(0, 0, 0, 0.75);
+	color: #fff;
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 20px;
+	padding: 8px 18px;
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: 0.3px;
+	pointer-events: none;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+}
+
+#translateIndicator::before {
+	content: '';
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: #6dff6d;
+	animation: translatePulse 0.9s ease-in-out infinite;
+}
+
+@keyframes translatePulse {
+	0%, 100% { opacity: 0.3; transform: scale(0.8); }
+	50% { opacity: 1; transform: scale(1.2); }
+}
