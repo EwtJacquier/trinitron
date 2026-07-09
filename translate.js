@@ -8,14 +8,16 @@
 	const MAX_CAPTURE_WIDTH = 1280; // reduz payload/custo sem perder legibilidade
 
 	// Fingerprint de frame (cache de reuso) — mesma heurística de grade da Fase 2.
-	const DET_W = 192, DET_H = 108;   // resolução de análise
-	const GRID_X = 24, GRID_Y = 14;   // grade grosseira de luminância
+	const DET_W = 320, DET_H = 180;   // resolução de análise do fingerprint
+	const GRID_X = 40, GRID_Y = 22;   // grade fina (pega mudança de texto pequeno)
 	const CACHE_MAX = 12;             // entradas guardadas por sessão
-	const CACHE_THRESH = 4;           // diff média por célula p/ considerar "mesma tela"
+	const CELL_DELTA = 8;             // variação de luminância (0–255) p/ célula "mudar"
+	const CELL_TOLERANCE = 3;         // nº de células que podem mudar e ainda ser "mesma tela"
 	const LS = {
 		key: 'trinitron.geminiKey',
 		model: 'trinitron.geminiModel',
 		enabled: 'trinitron.translateEnabled',
+		cache: 'trinitron.cacheEnabled',
 		panelMode: 'trinitron.transPanelMode',
 		font: 'trinitron.transFont',
 		preset: 'trinitron.transPreset',
@@ -45,6 +47,7 @@
 	const keyInput = document.getElementById('geminiKey');
 	const modelInput = document.getElementById('geminiModel');
 	const enabledInput = document.getElementById('translateEnabled');
+	const cacheEnabledInput = document.getElementById('cacheEnabled');
 	const translateBtn = document.getElementById('translateBtn');
 	const peekBtn = document.getElementById('translatePeekBtn');
 	const clearBtn = document.getElementById('translateClearBtn');
@@ -124,6 +127,7 @@
 		keyInput.value = localStorage.getItem(LS.key) || '';
 		modelInput.value = localStorage.getItem(LS.model) || DEFAULT_MODEL;
 		enabledInput.checked = localStorage.getItem(LS.enabled) === 'true';
+		cacheEnabledInput.checked = localStorage.getItem(LS.cache) !== 'false'; // ligado por padrão
 		panelModeInput.checked = localStorage.getItem(LS.panelMode) === 'true';
 		fontInput.value = localStorage.getItem(LS.font) || 'monospace';
 		if (!fontInput.value) fontInput.value = 'monospace'; // valor salvo antigo já removido → 1ª opção
@@ -150,6 +154,7 @@
 	keyInput.addEventListener('change', () => save(LS.key, keyInput.value.trim()));
 	modelInput.addEventListener('change', () => save(LS.model, modelInput.value.trim()));
 	enabledInput.addEventListener('change', () => save(LS.enabled, enabledInput.checked));
+	cacheEnabledInput.addEventListener('change', () => save(LS.cache, cacheEnabledInput.checked));
 	panelModeInput.addEventListener('change', () => { save(LS.panelMode, panelModeInput.checked); rerender(); });
 	fontInput.addEventListener('change', () => { save(LS.font, fontInput.value); rerender(); });
 	presetInput.addEventListener('change', () => { save(LS.preset, presetInput.value); rerender(); });
@@ -212,18 +217,22 @@
 		return grid;
 	}
 
-	function gridDiff(a, b) {
-		if (!a || !b) return Infinity;
-		let sum = 0;
-		for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
-		return sum / a.length;
+	// "Mesma tela" = quase nenhuma célula mudou além do limiar. Usar contagem de
+	// células (não média) evita que uma mudança pequena de texto seja diluída.
+	function sameScreen(a, b) {
+		if (!a || !b || a.length !== b.length) return false;
+		let changed = 0;
+		for (let i = 0; i < a.length; i++) {
+			if (Math.abs(a[i] - b[i]) > CELL_DELTA && ++changed > CELL_TOLERANCE) return false;
+		}
+		return true;
 	}
 
-	// Procura no cache uma tela parecida; devolve a entrada (e a promove no LRU).
+	// Procura no cache uma tela idêntica; devolve a entrada (e a promove no LRU).
 	function cacheLookup(grid) {
 		if (!grid) return null;
 		for (let i = 0; i < frameCache.length; i++) {
-			if (gridDiff(grid, frameCache[i].grid) < CACHE_THRESH) {
+			if (sameScreen(grid, frameCache[i].grid)) {
 				const [entry] = frameCache.splice(i, 1);
 				frameCache.unshift(entry);
 				return entry;
@@ -527,7 +536,7 @@
 
 		// Cache de frames: se a tela repete, reusa sem chamar a API (custo zero).
 		const grid = frameFingerprint();
-		const hit = cacheLookup(grid);
+		const hit = cacheEnabledInput.checked ? cacheLookup(grid) : null;
 		if (hit) {
 			lastItems = hit.items;
 			showTranslation();
@@ -548,7 +557,7 @@
 			lastItems = (Array.isArray(items) ? items : []).filter(it => isMeaningful(it.pt));
 			showTranslation();
 			setStatus(lastItems.length ? `${lastItems.length} bloco(s) traduzido(s).` : 'Nenhum texto detectado.');
-			cacheStore(grid, lastItems);
+			if (cacheEnabledInput.checked) cacheStore(grid, lastItems);
 			recordCall(usage);
 			scheduleHide();
 		} catch (err) {
