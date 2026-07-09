@@ -250,6 +250,38 @@ button {
 	color: #9fe0a0;
 }
 
+.shortcut-legend {
+	margin: 10px 0 4px;
+}
+
+.shortcut-legend ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 12px;
+	color: #bbb;
+}
+
+.shortcut-legend li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 5px;
+}
+
+.shortcut-legend kbd {
+	display: inline-block;
+	min-width: 18px;
+	text-align: center;
+	padding: 2px 6px;
+	background: rgba(255, 255, 255, 0.12);
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 11px;
+	color: #fff;
+}
+
 #translateStatus.error {
 	color: #ff8a80;
 }

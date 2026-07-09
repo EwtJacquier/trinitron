@@ -4,8 +4,14 @@
 // num painel lateral. Disparo manual apenas: botão ou tecla T.
 
 (function () {
-	const DEFAULT_MODEL = 'gemini-flash-latest'; // alias sempre atual → não quebra em deprecações
+	const DEFAULT_MODEL = 'gemini-2.5-flash-lite'; // barato e rápido p/ OCR+tradução
 	const MAX_CAPTURE_WIDTH = 1280; // reduz payload/custo sem perder legibilidade
+
+	// Fingerprint de frame (cache de reuso) — mesma heurística de grade da Fase 2.
+	const DET_W = 192, DET_H = 108;   // resolução de análise
+	const GRID_X = 24, GRID_Y = 14;   // grade grosseira de luminância
+	const CACHE_MAX = 12;             // entradas guardadas por sessão
+	const CACHE_THRESH = 4;           // diff média por célula p/ considerar "mesma tela"
 	const LS = {
 		key: 'trinitron.geminiKey',
 		model: 'trinitron.geminiModel',
@@ -59,6 +65,8 @@
 	let visible = false;   // tradução atualmente na tela?
 	let peeking = false;   // botão "segurar para ver" pressionado?
 	let wasVisible = false;
+	let detCanvas = null, detCtx = null; // canvas minúsculo p/ fingerprint
+	const frameCache = [];               // LRU: { grid, items }
 
 	PRESETS.forEach(p => {
 		const o = document.createElement('option');
@@ -86,7 +94,8 @@
 		modelInput.value = localStorage.getItem(LS.model) || DEFAULT_MODEL;
 		enabledInput.checked = localStorage.getItem(LS.enabled) === 'true';
 		panelModeInput.checked = localStorage.getItem(LS.panelMode) === 'true';
-		fontInput.value = localStorage.getItem(LS.font) || 'sans-serif';
+		fontInput.value = localStorage.getItem(LS.font) || 'monospace';
+		if (!fontInput.value) fontInput.value = 'monospace'; // valor salvo antigo já removido → 1ª opção
 		presetInput.value = localStorage.getItem(LS.preset) || 'classico';
 		fontScaleInput.value = localStorage.getItem(LS.fontScale) || '0.8';
 		fontScaleValEl.textContent = fontScaleInput.value;
@@ -128,6 +137,60 @@
 		return c.toDataURL('image/jpeg', 0.85);
 	}
 
+	// ── Cache de frames: reusa tradução quando a tela repete (sem chamar a API) ──
+	// Impressão digital = grade de luminância média do frame (do vídeo limpo).
+	function frameFingerprint() {
+		const vw = video.videoWidth, vh = video.videoHeight;
+		if (!vw || !vh) return null;
+		if (!detCanvas) {
+			detCanvas = document.createElement('canvas');
+			detCanvas.width = DET_W; detCanvas.height = DET_H;
+			detCtx = detCanvas.getContext('2d', { willReadFrequently: true });
+		}
+		detCtx.drawImage(video, 0, 0, DET_W, DET_H);
+		const data = detCtx.getImageData(0, 0, DET_W, DET_H).data;
+		const grid = new Float32Array(GRID_X * GRID_Y);
+		const counts = new Int32Array(GRID_X * GRID_Y);
+		for (let y = 0; y < DET_H; y++) {
+			const gy = (y * GRID_Y / DET_H) | 0;
+			for (let x = 0; x < DET_W; x++) {
+				const gx = (x * GRID_X / DET_W) | 0;
+				const lum = data[(y * DET_W + x) * 4] * 0.299 + data[(y * DET_W + x) * 4 + 1] * 0.587 + data[(y * DET_W + x) * 4 + 2] * 0.114;
+				const c = gy * GRID_X + gx;
+				grid[c] += lum;
+				counts[c]++;
+			}
+		}
+		for (let c = 0; c < grid.length; c++) grid[c] /= counts[c] || 1;
+		return grid;
+	}
+
+	function gridDiff(a, b) {
+		if (!a || !b) return Infinity;
+		let sum = 0;
+		for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+		return sum / a.length;
+	}
+
+	// Procura no cache uma tela parecida; devolve a entrada (e a promove no LRU).
+	function cacheLookup(grid) {
+		if (!grid) return null;
+		for (let i = 0; i < frameCache.length; i++) {
+			if (gridDiff(grid, frameCache[i].grid) < CACHE_THRESH) {
+				const [entry] = frameCache.splice(i, 1);
+				frameCache.unshift(entry);
+				return entry;
+			}
+		}
+		return null;
+	}
+
+	function cacheStore(grid, items) {
+		if (!grid) return;
+		frameCache.unshift({ grid, items });
+		if (frameCache.length > CACHE_MAX) frameCache.length = CACHE_MAX;
+	}
+
 	// ── Chamada ao Gemini com saída estruturada (JSON) ───────────────────────
 	const PROMPT =
 		'Você é um tradutor de tela de videogame em tempo real. Analise a imagem e ' +
@@ -166,6 +229,8 @@
 			}],
 			generationConfig: {
 				temperature: 0,
+				maxOutputTokens: 2048,
+				thinkingConfig: { thinkingBudget: 0 },
 				responseMimeType: 'application/json',
 				responseSchema: RESPONSE_SCHEMA
 			}
@@ -297,11 +362,10 @@
 		panel.style.display = 'none';
 	}
 
-	// "Limpar": esquece a última tradução de vez.
+	// "Esconder": tira da tela, mas MANTÉM lastItems na memória (peek/cache reexibem).
 	function clearTranslation() {
 		clearTimeout(hideTimer);
 		peeking = false;
-		lastItems = [];
 		hideTranslation();
 		setStatus('');
 	}
@@ -312,9 +376,10 @@
 		if (secs > 0) hideTimer = setTimeout(hideTranslation, secs * 1000);
 	}
 
-	// Segurar o botão mostra a última tradução; soltar restaura o estado anterior.
+	// Segurar (botão ou tecla R) mostra a última tradução; soltar restaura o estado.
 	function startPeek(e) {
 		if (e) e.preventDefault();
+		if (peeking) return;
 		if (!lastItems.length) { setStatus('Nada traduzido ainda.', true); return; }
 		peeking = true;
 		wasVisible = visible;
@@ -333,6 +398,18 @@
 		if (busy) return;
 		const apiKey = keyInput.value.trim();
 		if (!apiKey) { setStatus('Cole a chave da API do Gemini primeiro.', true); return; }
+
+		// Cache de frames: se a tela repete, reusa sem chamar a API (custo zero).
+		const grid = frameFingerprint();
+		const hit = cacheLookup(grid);
+		if (hit) {
+			lastItems = hit.items;
+			showTranslation();
+			setStatus(lastItems.length ? 'Reaproveitado (sem custo).' : 'Nenhum texto detectado.');
+			scheduleHide();
+			return;
+		}
+
 		const frame = captureFrame();
 		if (!frame) { setStatus('Sem vídeo pra capturar.', true); return; }
 
@@ -344,6 +421,7 @@
 			lastItems = Array.isArray(items) ? items : [];
 			showTranslation();
 			setStatus(lastItems.length ? `${lastItems.length} bloco(s) traduzido(s).` : 'Nenhum texto detectado.');
+			cacheStore(grid, lastItems);
 			scheduleHide();
 		} catch (err) {
 			console.error(err);
@@ -354,7 +432,7 @@
 		}
 	}
 
-	// ── Disparos: botão + tecla T (sem worker automático) ────────────────────
+	// ── Disparos: botões (sem worker automático) ─────────────────────────────
 	translateBtn.addEventListener('click', translateScreen);
 	clearBtn.addEventListener('click', clearTranslation);
 
@@ -367,13 +445,22 @@
 	// Evita que o clique conte como "arrastar seleção" e trave o peek.
 	peekBtn.addEventListener('dragstart', (e) => e.preventDefault());
 
-	document.addEventListener('keydown', (e) => {
+	// ── Atalhos de teclado: T traduzir, R reexibir (segurar), E esconder ─────
+	function typingInField(e) {
 		const tag = (e.target.tagName || '').toLowerCase();
-		if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
-		if (enabledInput.checked && (e.key === 't' || e.key === 'T')) {
-			e.preventDefault();
-			translateScreen();
-		}
+		return tag === 'input' || tag === 'select' || tag === 'textarea';
+	}
+
+	document.addEventListener('keydown', (e) => {
+		if (!enabledInput.checked || typingInField(e) || e.repeat && e.key.toLowerCase() !== 'r') return;
+		const k = e.key.toLowerCase();
+		if (k === 't') { e.preventDefault(); translateScreen(); }
+		else if (k === 'e') { e.preventDefault(); clearTranslation(); }
+		else if (k === 'r') { e.preventDefault(); startPeek(); }
+	});
+
+	document.addEventListener('keyup', (e) => {
+		if (e.key.toLowerCase() === 'r') endPeek();
 	});
 
 	// Reposiciona o texto ao redimensionar (fontes do overlay dependem da altura).
