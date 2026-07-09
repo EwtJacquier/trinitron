@@ -115,14 +115,20 @@ button {
 	position: fixed;
 	top: 15px;
 	z-index: 21;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	background: rgba(0, 0, 0, 0.7);
 	color: white;
 	border: 1px solid rgba(255, 255, 255, 0.3);
-	padding: 10px 8px;
+	padding: 0;
 	cursor: pointer;
 	font-size: 18px;
+	line-height: 1;
 	border-radius: 4px;
 	width: 44px;
+	height: 44px;
 }
 
 #sidebarToggle {
@@ -131,8 +137,7 @@ button {
 
 #fullscreenBtn {
 	right: 64px;
-	padding-top: 2px;
-    padding-bottom: 3px;
+	font-size: 20px;
 }
 
 #sidebarToggle:hover,
@@ -164,4 +169,78 @@ button {
 #sidebar input[type="range"] {
 	width: 100%;
 	margin-top: 4px;
+}
+
+/* ── Translation UI ──────────────────────────────────────────────── */
+.sidebar-sep {
+	border: none;
+	border-top: 1px solid rgba(255, 255, 255, 0.15);
+	margin: 16px 0 12px;
+}
+
+.sidebar-title {
+	display: block;
+	font-size: 14px;
+	margin-bottom: 10px;
+}
+
+#translateSection input[type="password"],
+#translateSection input[type="color"] {
+	width: 100%;
+	margin-top: 4px;
+	box-sizing: border-box;
+}
+
+#translateSection input[type="color"] {
+	height: 30px;
+	padding: 2px;
+	cursor: pointer;
+}
+
+#translateSection label.inline-check {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+#translateSection label.inline-check input {
+	width: auto;
+	margin: 0;
+}
+
+#translateStatus {
+	font-size: 12px;
+	min-height: 16px;
+	margin-top: 6px;
+	color: #9fe0a0;
+}
+
+#translateStatus.error {
+	color: #ff8a80;
+}
+
+/* ── Translation overlay (over the canvas) ───────────────────────── */
+#translationOverlay {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.trans-block {
+	position: absolute;
+	box-sizing: border-box;
+	padding: 2px 6px;
+	border-radius: 3px;
+	line-height: 1.15;
+	font-weight: 600;
+	text-align: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	pointer-events: none;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }

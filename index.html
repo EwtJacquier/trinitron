@@ -51,16 +51,41 @@
 		<label>Volume:
 			<input type="range" id="volume" min="0" max="1" step="0.01" value="1">
 		</label>
+
+		<hr class="sidebar-sep">
+		<div id="translateSection">
+			<strong class="sidebar-title">Tradução (Gemini)</strong>
+			<label>Chave da API:
+				<input type="password" id="geminiKey" placeholder="Cole sua chave do Google AI Studio" autocomplete="off">
+			</label>
+			<label class="inline-check">
+				<input type="checkbox" id="translateEnabled"> Ativar tradução (tecla T)
+			</label>
+			<button id="translateBtn">🌐 Traduzir tela</button>
+			<button id="translateClearBtn">Limpar tradução</button>
+			<label>Cor da fonte:
+				<input type="color" id="transFontColor" value="#ffffff">
+			</label>
+			<label>Cor do fundo:
+				<input type="color" id="transBgColor" value="#000000">
+			</label>
+			<label>Opacidade do fundo:
+				<input type="range" id="transBgOpacity" min="0" max="1" step="0.05" value="0.75">
+			</label>
+			<div id="translateStatus"></div>
+		</div>
 	</div>
 
 	<video id="video" autoplay playsinline muted style="display:none;"></video>
 	<audio id="audio" autoplay controls style="display:none;"></audio>
 	<div id="container">
 		<canvas id="canvas" width="2562" height="1440"></canvas>
+		<div id="translationOverlay"></div>
 	</div>
 	<div id="fps">FPS: 0</div>
 
 	<script src="app.js"></script>
+	<script src="translate.js"></script>
 
 </body>
 
