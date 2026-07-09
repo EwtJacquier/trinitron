@@ -88,6 +88,15 @@
 		});
 	});
 
+	// Sub-abas dentro da aba Tradução.
+	document.querySelectorAll('.subtab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			const sub = btn.dataset.subtab;
+			document.querySelectorAll('.subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+			document.querySelectorAll('.subtab-panel').forEach(p => p.classList.toggle('active', p.dataset.subpanel === sub));
+		});
+	});
+
 	// ── Persistência simples no navegador ────────────────────────────────────
 	function loadPrefs() {
 		keyInput.value = localStorage.getItem(LS.key) || '';
@@ -376,6 +385,17 @@
 		if (secs > 0) hideTimer = setTimeout(hideTranslation, secs * 1000);
 	}
 
+	// Toggle (tecla E): esconde se estiver visível, mostra a última se estiver oculta.
+	function toggleTranslation() {
+		if (visible) {
+			clearTranslation();
+		} else {
+			if (!lastItems.length) { setStatus('Nada traduzido ainda.', true); return; }
+			clearTimeout(hideTimer);
+			showTranslation();
+		}
+	}
+
 	// Segurar (botão ou tecla R) mostra a última tradução; soltar restaura o estado.
 	function startPeek(e) {
 		if (e) e.preventDefault();
@@ -455,7 +475,7 @@
 		if (!enabledInput.checked || typingInField(e) || e.repeat && e.key.toLowerCase() !== 'r') return;
 		const k = e.key.toLowerCase();
 		if (k === 't') { e.preventDefault(); translateScreen(); }
-		else if (k === 'e') { e.preventDefault(); clearTranslation(); }
+		else if (k === 'e') { e.preventDefault(); toggleTranslation(); }
 		else if (k === 'r') { e.preventDefault(); startPeek(); }
 	});
 

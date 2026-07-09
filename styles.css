@@ -205,6 +205,39 @@ button {
 	display: block;
 }
 
+/* ── Sub-abas (mais discretas que as abas principais) ────────────── */
+.subtabs {
+	display: flex;
+	gap: 16px;
+	margin-bottom: 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.subtab-btn {
+	width: auto;
+	margin: 0;
+	padding: 6px 2px;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	color: #999;
+	cursor: pointer;
+	font-size: 12px;
+}
+
+.subtab-btn.active {
+	color: #fff;
+	border-bottom-color: rgba(255, 255, 255, 0.7);
+}
+
+.subtab-panel {
+	display: none;
+}
+
+.subtab-panel.active {
+	display: block;
+}
+
 /* ── Translation UI ──────────────────────────────────────────────── */
 .sidebar-sep {
 	border: none;

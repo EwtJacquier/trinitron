@@ -63,54 +63,62 @@
 		</div>
 
 		<div class="tab-panel" data-panel="translate">
-			<label>Chave da API:
-				<input type="password" id="geminiKey" placeholder="Cole sua chave do Google AI Studio" autocomplete="off">
-			</label>
-			<label>Modelo:
-				<input type="text" id="geminiModel" placeholder="gemini-2.5-flash-lite" autocomplete="off">
-			</label>
-			<label class="inline-check">
-				<input type="checkbox" id="translateEnabled"> Ativar atalhos de teclado
-			</label>
-			<button id="translateBtn">Traduzir tela</button>
-			<button id="translatePeekBtn">Segurar para reexibir</button>
-			<button id="translateClearBtn">Esconder tradução</button>
-
-			<div class="shortcut-legend">
-				<strong class="sidebar-title">Atalhos</strong>
-				<ul>
-					<li><kbd>T</kbd> Traduzir tela</li>
-					<li><kbd>R</kbd> Reexibir última (segurar)</li>
-					<li><kbd>E</kbd> Esconder tradução</li>
-				</ul>
+			<div class="subtabs">
+				<button class="subtab-btn active" data-subtab="geral">Traduzir</button>
+				<button class="subtab-btn" data-subtab="aparencia">Aparência</button>
 			</div>
 
-			<hr class="sidebar-sep">
-			<strong class="sidebar-title">Aparência</strong>
-			<label class="inline-check">
-				<input type="checkbox" id="transPanelMode"> Mostrar em painel lateral (esquerda)
-			</label>
-			<label>Fonte:
-				<select id="transFont">
-					<option value="monospace">Monoespaçada</option>
-					<option value="'VT323', monospace">Retro (VT323)</option>
-				</select>
-			</label>
-			<label>Combinação de cores:
-				<select id="transPreset"></select>
-			</label>
-			<label>Tamanho da fonte: <span id="transFontScaleVal">0.8</span>
-				<input type="range" id="transFontScale" min="0.35" max="1.5" step="0.05" value="0.8">
-			</label>
-			<label>Opacidade do fundo:
-				<input type="range" id="transBgOpacity" min="0" max="1" step="0.05" value="0.75">
-			</label>
-			<label>Espessura da borda: <span id="transBorderVal">0</span>
-				<input type="range" id="transBorderWidth" min="0" max="6" step="0.5" value="0">
-			</label>
-			<label>Esconder após (s): <span id="transHideVal">0</span> <small>(0 = nunca)</small>
-				<input type="range" id="transHideAfter" min="0" max="30" step="1" value="0">
-			</label>
+			<div class="subtab-panel active" data-subpanel="geral">
+				<label>Chave da API:
+					<input type="password" id="geminiKey" placeholder="Cole sua chave do Google AI Studio" autocomplete="off">
+				</label>
+				<label>Modelo:
+					<input type="text" id="geminiModel" placeholder="gemini-2.5-flash-lite" autocomplete="off">
+				</label>
+				<label class="inline-check">
+					<input type="checkbox" id="translateEnabled"> Ativar atalhos de teclado
+				</label>
+				<button id="translateBtn">Traduzir tela</button>
+				<button id="translatePeekBtn">Segurar para reexibir</button>
+				<button id="translateClearBtn">Esconder tradução</button>
+
+				<div class="shortcut-legend">
+					<strong class="sidebar-title">Atalhos</strong>
+					<ul>
+						<li><kbd>T</kbd> Traduzir tela</li>
+						<li><kbd>R</kbd> Reexibir última (segurar)</li>
+						<li><kbd>E</kbd> Esconder / mostrar (toggle)</li>
+					</ul>
+				</div>
+			</div>
+
+			<div class="subtab-panel" data-subpanel="aparencia">
+				<label class="inline-check">
+					<input type="checkbox" id="transPanelMode"> Mostrar em painel lateral (esquerda)
+				</label>
+				<label>Fonte:
+					<select id="transFont">
+						<option value="monospace">Monoespaçada</option>
+						<option value="'VT323', monospace">Retro (VT323)</option>
+					</select>
+				</label>
+				<label>Combinação de cores:
+					<select id="transPreset"></select>
+				</label>
+				<label>Tamanho da fonte: <span id="transFontScaleVal">0.8</span>
+					<input type="range" id="transFontScale" min="0.35" max="1.5" step="0.05" value="0.8">
+				</label>
+				<label>Opacidade do fundo:
+					<input type="range" id="transBgOpacity" min="0" max="1" step="0.05" value="0.75">
+				</label>
+				<label>Espessura da borda: <span id="transBorderVal">0</span>
+					<input type="range" id="transBorderWidth" min="0" max="6" step="0.5" value="0">
+				</label>
+				<label>Esconder após (s): <span id="transHideVal">0</span> <small>(0 = nunca)</small>
+					<input type="range" id="transHideAfter" min="0" max="30" step="1" value="0">
+				</label>
+			</div>
+
 			<div id="translateStatus"></div>
 		</div>
 	</div>
