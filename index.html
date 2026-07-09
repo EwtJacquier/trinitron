@@ -66,6 +66,7 @@
 			<div class="subtabs">
 				<button class="subtab-btn active" data-subtab="geral">Traduzir</button>
 				<button class="subtab-btn" data-subtab="aparencia">Aparência</button>
+				<button class="subtab-btn" data-subtab="uso">Uso</button>
 			</div>
 
 			<div class="subtab-panel active" data-subpanel="geral">
@@ -73,7 +74,7 @@
 					<input type="password" id="geminiKey" placeholder="Cole sua chave do Google AI Studio" autocomplete="off">
 				</label>
 				<label>Modelo:
-					<input type="text" id="geminiModel" placeholder="gemini-2.5-flash-lite" autocomplete="off">
+					<input type="text" id="geminiModel" placeholder="gemini-flash-latest" autocomplete="off">
 				</label>
 				<label class="inline-check">
 					<input type="checkbox" id="translateEnabled"> Ativar atalhos de teclado
@@ -117,6 +118,37 @@
 				<label>Esconder após (s): <span id="transHideVal">0</span> <small>(0 = nunca)</small>
 					<input type="range" id="transHideAfter" min="0" max="30" step="1" value="0">
 				</label>
+			</div>
+
+			<div class="subtab-panel" data-subpanel="uso">
+				<div class="usage-metric">
+					<span class="usage-label">Requisições hoje: <b id="uReqDay">0</b> / <span id="uRpd">1000</span></span>
+					<div class="usage-bar"><div class="usage-bar-fill" id="uBarRpd"></div></div>
+				</div>
+				<div class="usage-metric">
+					<span class="usage-label">Req/min (60s): <b id="uRpm">0</b> / <span id="uRpmLim">15</span></span>
+					<div class="usage-bar"><div class="usage-bar-fill" id="uBarRpm"></div></div>
+				</div>
+				<div class="usage-metric">
+					<span class="usage-label">Tokens/min (60s): <b id="uTpm">0</b> / <span id="uTpmLim">250k</span></span>
+					<div class="usage-bar"><div class="usage-bar-fill" id="uBarTpm"></div></div>
+				</div>
+				<div class="usage-tally">Hoje — reais: <b id="uReal">0</b> · reaproveitados: <b id="uHit">0</b></div>
+
+				<hr class="sidebar-sep">
+				<strong class="sidebar-title">Limites (editáveis)</strong>
+				<label>Req/dia (RPD):
+					<input type="number" id="limRpd" min="1" value="1000">
+				</label>
+				<label>Req/min (RPM):
+					<input type="number" id="limRpm" min="1" value="15">
+				</label>
+				<label>Tokens/min (TPM):
+					<input type="number" id="limTpm" min="1" value="250000">
+				</label>
+				<button id="usageResetBtn">Zerar contadores</button>
+
+				<p class="usage-note">Contagem local do que este app enviou. A quota real do projeto está no <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a>.</p>
 			</div>
 
 			<div id="translateStatus"></div>

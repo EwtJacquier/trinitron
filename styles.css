@@ -344,6 +344,60 @@ button {
 	paint-order: stroke fill;
 }
 
+/* ── Sub-aba Uso (barras de consumo) ─────────────────────────────── */
+.usage-metric {
+	margin-bottom: 12px;
+}
+
+.usage-label {
+	display: block;
+	font-size: 12px;
+	margin-bottom: 4px;
+	color: #ddd;
+}
+
+.usage-bar {
+	height: 8px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.12);
+	overflow: hidden;
+}
+
+.usage-bar-fill {
+	height: 100%;
+	width: 0%;
+	background: #6dff6d;
+	transition: width 0.3s ease;
+}
+
+.usage-bar-fill.warn {
+	background: #ff8a80;
+}
+
+.usage-tally {
+	font-size: 12px;
+	color: #bbb;
+	margin: 8px 0 4px;
+}
+
+#translateSection .usage-note,
+.usage-note {
+	font-size: 11px;
+	color: #999;
+	line-height: 1.4;
+	margin-top: 10px;
+}
+
+.usage-note a {
+	color: #8ab4f8;
+}
+
+.subtab-panel input[type="number"] {
+	width: 100%;
+	margin-top: 4px;
+	box-sizing: border-box;
+}
+
 /* ── Translation left panel ──────────────────────────────────────── */
 #translationPanel {
 	position: fixed;

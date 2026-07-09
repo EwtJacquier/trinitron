@@ -4,7 +4,7 @@
 // num painel lateral. Disparo manual apenas: botão ou tecla T.
 
 (function () {
-	const DEFAULT_MODEL = 'gemini-2.5-flash-lite'; // barato e rápido p/ OCR+tradução
+	const DEFAULT_MODEL = 'gemini-flash-latest'; // melhor localização (grounding) das caixas
 	const MAX_CAPTURE_WIDTH = 1280; // reduz payload/custo sem perder legibilidade
 
 	// Fingerprint de frame (cache de reuso) — mesma heurística de grade da Fase 2.
@@ -22,7 +22,9 @@
 		fontScale: 'trinitron.transFontScale',
 		bgOpacity: 'trinitron.transBgOpacity',
 		borderWidth: 'trinitron.transBorderWidth',
-		hideAfter: 'trinitron.transHideAfter'
+		hideAfter: 'trinitron.transHideAfter',
+		usageDay: 'trinitron.usageDay',
+		limits: 'trinitron.usageLimits'
 	};
 
 	// Combinações de cores prontas: cor da fonte, fundo e borda.
@@ -58,6 +60,23 @@
 	const hideValEl = document.getElementById('transHideVal');
 	const statusEl = document.getElementById('translateStatus');
 	const indicator = document.getElementById('translateIndicator');
+	const sidebar = document.getElementById('sidebar');
+	const usoPanel = document.querySelector('.subtab-panel[data-subpanel="uso"]');
+	const uReqDay = document.getElementById('uReqDay');
+	const uRpd = document.getElementById('uRpd');
+	const uBarRpd = document.getElementById('uBarRpd');
+	const uRpm = document.getElementById('uRpm');
+	const uRpmLim = document.getElementById('uRpmLim');
+	const uBarRpm = document.getElementById('uBarRpm');
+	const uTpm = document.getElementById('uTpm');
+	const uTpmLim = document.getElementById('uTpmLim');
+	const uBarTpm = document.getElementById('uBarTpm');
+	const uReal = document.getElementById('uReal');
+	const uHit = document.getElementById('uHit');
+	const limRpd = document.getElementById('limRpd');
+	const limRpm = document.getElementById('limRpm');
+	const limTpm = document.getElementById('limTpm');
+	const usageResetBtn = document.getElementById('usageResetBtn');
 
 	let busy = false;
 	let lastItems = [];
@@ -67,6 +86,9 @@
 	let wasVisible = false;
 	let detCanvas = null, detCtx = null; // canvas minúsculo p/ fingerprint
 	const frameCache = [];               // LRU: { grid, items }
+	const callLog = [];                  // {t, tokens} das chamadas reais (janela 60s)
+	let usageDay = { day: '', reqDay: 0, hitDay: 0 };
+	let limits = { rpd: 1000, rpm: 15, tpm: 250000 };
 
 	PRESETS.forEach(p => {
 		const o = document.createElement('option');
@@ -113,6 +135,13 @@
 		borderValEl.textContent = borderWidthInput.value;
 		hideAfterInput.value = localStorage.getItem(LS.hideAfter) || '0';
 		hideValEl.textContent = hideAfterInput.value;
+		try { usageDay = JSON.parse(localStorage.getItem(LS.usageDay)) || usageDay; } catch (e) { /* ignore */ }
+		try { limits = Object.assign(limits, JSON.parse(localStorage.getItem(LS.limits)) || {}); } catch (e) { /* ignore */ }
+		rollDay();
+		limRpd.value = limits.rpd;
+		limRpm.value = limits.rpm;
+		limTpm.value = limits.tpm;
+		refreshUsage();
 	}
 
 	function save(key, val) { localStorage.setItem(key, val); }
@@ -128,6 +157,15 @@
 	bgOpacityInput.addEventListener('input', () => { save(LS.bgOpacity, bgOpacityInput.value); rerender(); });
 	borderWidthInput.addEventListener('input', () => { save(LS.borderWidth, borderWidthInput.value); borderValEl.textContent = borderWidthInput.value; rerender(); });
 	hideAfterInput.addEventListener('input', () => { save(LS.hideAfter, hideAfterInput.value); hideValEl.textContent = hideAfterInput.value; });
+	limRpd.addEventListener('input', () => { limits.rpd = parseInt(limRpd.value, 10) || 1; saveLimits(); refreshUsage(); });
+	limRpm.addEventListener('input', () => { limits.rpm = parseInt(limRpm.value, 10) || 1; saveLimits(); refreshUsage(); });
+	limTpm.addEventListener('input', () => { limits.tpm = parseInt(limTpm.value, 10) || 1; saveLimits(); refreshUsage(); });
+	usageResetBtn.addEventListener('click', () => {
+		usageDay = { day: pacificDay(), reqDay: 0, hitDay: 0 };
+		callLog.length = 0;
+		saveUsage();
+		refreshUsage();
+	});
 
 	function setStatus(msg, isError) {
 		statusEl.textContent = msg || '';
@@ -200,6 +238,64 @@
 		if (frameCache.length > CACHE_MAX) frameCache.length = CACHE_MAX;
 	}
 
+	// ── Contadores de uso da API (local) ─────────────────────────────────────
+	function pacificDay() {
+		return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+	}
+
+	function saveUsage() { localStorage.setItem(LS.usageDay, JSON.stringify(usageDay)); }
+	function saveLimits() { localStorage.setItem(LS.limits, JSON.stringify(limits)); }
+
+	function rollDay() {
+		const d = pacificDay();
+		if (usageDay.day !== d) {
+			usageDay = { day: d, reqDay: 0, hitDay: 0 };
+			saveUsage();
+		}
+	}
+
+	function recordCall(usage) {
+		rollDay();
+		callLog.push({ t: Date.now(), tokens: (usage && usage.totalTokenCount) || 0 });
+		usageDay.reqDay++;
+		saveUsage();
+		refreshUsage();
+	}
+
+	function recordHit() {
+		rollDay();
+		usageDay.hitDay++;
+		saveUsage();
+		refreshUsage();
+	}
+
+	function fmt(n) {
+		return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
+	}
+
+	function setBar(bar, valEl, val, lim, useFmt) {
+		valEl.textContent = useFmt ? fmt(val) : val;
+		const pct = lim > 0 ? Math.min(100, val / lim * 100) : 0;
+		bar.style.width = pct + '%';
+		bar.classList.toggle('warn', pct >= 90);
+	}
+
+	function refreshUsage() {
+		rollDay();
+		const now = Date.now();
+		while (callLog.length && now - callLog[0].t > 60000) callLog.shift();
+		const rpm = callLog.length;
+		const tpm = callLog.reduce((s, e) => s + e.tokens, 0);
+		setBar(uBarRpd, uReqDay, usageDay.reqDay, limits.rpd);
+		setBar(uBarRpm, uRpm, rpm, limits.rpm);
+		setBar(uBarTpm, uTpm, tpm, limits.tpm, true);
+		uRpd.textContent = limits.rpd;
+		uRpmLim.textContent = limits.rpm;
+		uTpmLim.textContent = fmt(limits.tpm);
+		uReal.textContent = usageDay.reqDay;
+		uHit.textContent = usageDay.hitDay;
+	}
+
 	// ── Chamada ao Gemini com saída estruturada (JSON) ───────────────────────
 	const PROMPT =
 		'Você é um tradutor de tela de videogame em tempo real. Analise a imagem e ' +
@@ -207,6 +303,8 @@
 		'"original" (texto detectado), "pt" (tradução natural para português do Brasil no contexto de um jogo), ' +
 		'e a caixa delimitadora como frações da imagem entre 0 e 1: "x","y" (canto superior esquerdo), ' +
 		'"w","h" (largura e altura). Ignore texto decorativo ilegível, logos e marcas d\'água. ' +
+		'Ignore também blocos que sejam apenas números, placares, cronômetros ou fórmulas ' +
+		'(ex.: "355", "x5", "10%", "1/2") — só traduza texto que tenha palavras. ' +
 		'Se não houver texto, retorne uma lista vazia.';
 
 	const RESPONSE_SCHEMA = {
@@ -256,7 +354,15 @@
 		const json = await res.json();
 		const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
 		if (!text) throw new Error('Resposta vazia da API');
-		return JSON.parse(text);
+		return { items: JSON.parse(text), usage: json.usageMetadata || null };
+	}
+
+	// True se o texto tem palavras reais — descarta blocos só de número/fórmula.
+	const FORMULA_RE = /^[\s\d.,:;xX×*+\-/=%()\[\]#°]+$/;
+	function isMeaningful(text) {
+		const t = (text || '').trim();
+		if (!t || FORMULA_RE.test(t)) return false;
+		return /\p{L}/u.test(t);
 	}
 
 	// Alguns modelos devolvem coordenadas em escala 0–1000. Normaliza p/ 0–1.
@@ -426,6 +532,7 @@
 			lastItems = hit.items;
 			showTranslation();
 			setStatus(lastItems.length ? 'Reaproveitado (sem custo).' : 'Nenhum texto detectado.');
+			recordHit();
 			scheduleHide();
 			return;
 		}
@@ -437,11 +544,12 @@
 		setStatus('Traduzindo…');
 		indicator.style.display = 'flex';
 		try {
-			const items = await callGemini(frame, apiKey);
-			lastItems = Array.isArray(items) ? items : [];
+			const { items, usage } = await callGemini(frame, apiKey);
+			lastItems = (Array.isArray(items) ? items : []).filter(it => isMeaningful(it.pt));
 			showTranslation();
 			setStatus(lastItems.length ? `${lastItems.length} bloco(s) traduzido(s).` : 'Nenhum texto detectado.');
 			cacheStore(grid, lastItems);
+			recordCall(usage);
 			scheduleHide();
 		} catch (err) {
 			console.error(err);
@@ -485,6 +593,11 @@
 
 	// Reposiciona o texto ao redimensionar (fontes do overlay dependem da altura).
 	window.addEventListener('resize', rerender);
+
+	// Atualiza as janelas de 60s (RPM/TPM) enquanto a sub-aba Uso está aberta.
+	setInterval(() => {
+		if (sidebar.style.display !== 'none' && usoPanel && usoPanel.classList.contains('active')) refreshUsage();
+	}, 1000);
 
 	loadPrefs();
 })();
