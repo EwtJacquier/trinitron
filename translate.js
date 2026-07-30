@@ -6,6 +6,8 @@
 (function () {
 	const DEFAULT_MODEL = 'gemini-flash-latest'; // melhor localização (grounding) das caixas
 	const MAX_CAPTURE_WIDTH = 1280; // reduz payload/custo sem perder legibilidade
+	const THINKING_BUDGET = 128;    // mínimo prático: gemini-flash-latest recusa budget 0
+	const HISTORY_MAX = 50;         // traduções no painel; as mais antigas caem sozinhas
 
 	// Fingerprint de frame (cache de reuso) — mesma heurística de grade da Fase 2.
 	const DET_W = 320, DET_H = 180;   // resolução de análise do fingerprint
@@ -52,6 +54,7 @@
 	const peekBtn = document.getElementById('translatePeekBtn');
 	const clearBtn = document.getElementById('translateClearBtn');
 	const panelModeInput = document.getElementById('transPanelMode');
+	const clearHistoryBtn = document.getElementById('transClearHistory');
 	const fontInput = document.getElementById('transFont');
 	const presetInput = document.getElementById('transPreset');
 	const fontScaleInput = document.getElementById('transFontScale');
@@ -83,6 +86,7 @@
 
 	let busy = false;
 	let lastItems = [];
+	const panelHistory = [];             // { time, items } — índice 0 é a mais recente
 	let hideTimer = null;
 	let visible = false;   // tradução atualmente na tela?
 	let peeking = false;   // botão "segurar para ver" pressionado?
@@ -156,6 +160,11 @@
 	enabledInput.addEventListener('change', () => save(LS.enabled, enabledInput.checked));
 	cacheEnabledInput.addEventListener('change', () => save(LS.cache, cacheEnabledInput.checked));
 	panelModeInput.addEventListener('change', () => { save(LS.panelMode, panelModeInput.checked); rerender(); });
+	clearHistoryBtn.addEventListener('click', () => {
+		panelHistory.length = 0;
+		rerender();
+		setStatus('Histórico do painel limpo.');
+	});
 	fontInput.addEventListener('change', () => { save(LS.font, fontInput.value); rerender(); });
 	presetInput.addEventListener('change', () => { save(LS.preset, presetInput.value); rerender(); });
 	fontScaleInput.addEventListener('input', () => { save(LS.fontScale, fontScaleInput.value); fontScaleValEl.textContent = fontScaleInput.value; rerender(); });
@@ -332,6 +341,11 @@
 		}
 	};
 
+	// Cada modelo aceita um formato/faixa diferente de thinkingConfig (e os alias
+	// "-latest" mudam de modelo sem aviso). Na primeira rejeição, repete a chamada
+	// sem o campo e desiste dele pelo resto da sessão.
+	let thinkingSupported = true;
+
 	async function callGemini(dataUrl, apiKey) {
 		const base64 = dataUrl.split(',')[1];
 		const model = modelInput.value.trim() || DEFAULT_MODEL;
@@ -346,16 +360,24 @@
 			generationConfig: {
 				temperature: 0,
 				maxOutputTokens: 2048,
-				thinkingConfig: { thinkingBudget: 0 },
 				responseMimeType: 'application/json',
 				responseSchema: RESPONSE_SCHEMA
 			}
 		};
-		const res = await fetch(url, {
+		if (thinkingSupported) {
+			body.generationConfig.thinkingConfig = { thinkingBudget: THINKING_BUDGET };
+		}
+		const post = () => fetch(url, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(body)
 		});
+		let res = await post();
+		if (res.status === 400 && thinkingSupported) {
+			thinkingSupported = false;
+			delete body.generationConfig.thinkingConfig;
+			res = await post();
+		}
 		if (!res.ok) {
 			const detail = await res.text().catch(() => '');
 			throw new Error(`HTTP ${res.status} — ${detail.slice(0, 200)}`);
@@ -408,9 +430,23 @@
 		panel.innerHTML = '';
 		const usePanel = panelModeInput.checked;
 		panel.style.display = usePanel ? 'flex' : 'none';
+		if (usePanel) {
+			// O painel mostra o histórico inteiro, não só a tradução atual.
+			if (panelHistory.length) renderPanel();
+			return;
+		}
 		if (!items || !items.length) return;
-		if (usePanel) renderPanel(items);
-		else renderCanvas(items);
+		renderCanvas(items);
+	}
+
+	// Empilha uma tradução no topo do histórico e descarta as mais antigas.
+	function pushHistory(items) {
+		if (!items || !items.length) return;
+		panelHistory.unshift({
+			time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+			items: items.slice()
+		});
+		if (panelHistory.length > HISTORY_MAX) panelHistory.length = HISTORY_MAX;
 	}
 
 	function renderCanvas(items) {
@@ -450,27 +486,42 @@
 		}
 	}
 
-	function renderPanel(items) {
+	// O painel é um histórico: cada tradução vira uma entrada nova no topo, e as
+	// anteriores continuam abaixo (separadas por uma linha) até o limite/limpeza.
+	function renderPanel() {
 		const scale = parseFloat(fontScaleInput.value) || 0.8;
-		for (const it of items) {
-			const item = document.createElement('div');
-			item.className = 'panel-item';
-			item.style.fontFamily = fontInput.value;
-			if (it.original) {
-				const src = document.createElement('span');
-				src.className = 'panel-src';
-				src.style.fontSize = (13 * scale) + 'px';
-				src.textContent = it.original;
-				item.appendChild(src);
+		for (const entry of panelHistory) {
+			const group = document.createElement('div');
+			group.className = 'panel-entry';
+
+			const time = document.createElement('div');
+			time.className = 'panel-time';
+			time.style.fontSize = (11 * scale) + 'px';
+			time.textContent = entry.time;
+			group.appendChild(time);
+
+			for (const it of entry.items) {
+				const item = document.createElement('div');
+				item.className = 'panel-item';
+				item.style.fontFamily = fontInput.value;
+				if (it.original) {
+					const src = document.createElement('span');
+					src.className = 'panel-src';
+					src.style.fontSize = (13 * scale) + 'px';
+					src.textContent = it.original;
+					item.appendChild(src);
+				}
+				const pt = document.createElement('span');
+				pt.className = 'panel-pt';
+				pt.style.fontSize = (22 * scale) + 'px';
+				pt.textContent = it.pt;
+				styleText(pt);
+				item.appendChild(pt);
+				group.appendChild(item);
 			}
-			const pt = document.createElement('span');
-			pt.className = 'panel-pt';
-			pt.style.fontSize = (22 * scale) + 'px';
-			pt.textContent = it.pt;
-			styleText(pt);
-			item.appendChild(pt);
-			panel.appendChild(item);
+			panel.appendChild(group);
 		}
+		panel.scrollTop = 0; // entrada mais recente fica sempre à vista
 	}
 
 	function showTranslation() {
@@ -539,6 +590,7 @@
 		const hit = cacheEnabledInput.checked ? cacheLookup(grid) : null;
 		if (hit) {
 			lastItems = hit.items;
+			pushHistory(lastItems);
 			showTranslation();
 			setStatus(lastItems.length ? 'Reaproveitado (sem custo).' : 'Nenhum texto detectado.');
 			recordHit();
@@ -555,6 +607,7 @@
 		try {
 			const { items, usage } = await callGemini(frame, apiKey);
 			lastItems = (Array.isArray(items) ? items : []).filter(it => isMeaningful(it.pt));
+			pushHistory(lastItems);
 			showTranslation();
 			setStatus(lastItems.length ? `${lastItems.length} bloco(s) traduzido(s).` : 'Nenhum texto detectado.');
 			if (cacheEnabledInput.checked) cacheStore(grid, lastItems);
