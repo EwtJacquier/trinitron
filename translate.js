@@ -317,13 +317,17 @@
 	// ── Chamada ao Gemini com saída estruturada (JSON) ───────────────────────
 	const PROMPT =
 		'Você é um tradutor de tela de videogame em tempo real. Analise a imagem e ' +
-		'detecte TODOS os blocos de texto legível (japonês ou inglês). Para cada bloco forneça: ' +
-		'"original" (texto detectado), "pt" (tradução natural para português do Brasil no contexto de um jogo), ' +
+		'detecte SOMENTE os blocos de texto em JAPONÊS (kanji, hiragana ou katakana). ' +
+		'NÃO retorne blocos que já estejam em inglês, português ou qualquer outro idioma ' +
+		'em alfabeto latino — mesmo que sejam legíveis, esses devem ser omitidos da lista. ' +
+		'Um bloco misto só entra se contiver caracteres japoneses; nesse caso traduza o bloco inteiro. ' +
+		'Para cada bloco forneça: ' +
+		'"original" (texto japonês detectado), "pt" (tradução natural para português do Brasil no contexto de um jogo), ' +
 		'e a caixa delimitadora como frações da imagem entre 0 e 1: "x","y" (canto superior esquerdo), ' +
 		'"w","h" (largura e altura). Ignore texto decorativo ilegível, logos e marcas d\'água. ' +
 		'Ignore também blocos que sejam apenas números, placares, cronômetros ou fórmulas ' +
 		'(ex.: "355", "x5", "10%", "1/2") — só traduza texto que tenha palavras. ' +
-		'Se não houver texto, retorne uma lista vazia.';
+		'Se não houver texto japonês na imagem, retorne uma lista vazia.';
 
 	const RESPONSE_SCHEMA = {
 		type: 'ARRAY',
@@ -394,6 +398,16 @@
 		const t = (text || '').trim();
 		if (!t || FORMULA_RE.test(t)) return false;
 		return /\p{L}/u.test(t);
+	}
+
+	// Rede de segurança pro prompt: às vezes o modelo devolve um bloco que já
+	// estava em inglês. Só descarta quando há prova (veio "original" e ele não tem
+	// kana/kanji); sem o campo, mantém — o schema não o exige.
+	// hiragana, katakana, kanji (CJK ext-A + unificado) e katakana meia-largura
+	const JAPANESE_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿ｦ-ﾟ]/;
+	function isJapanese(item) {
+		if (!item.original) return true;
+		return JAPANESE_RE.test(item.original);
 	}
 
 	// Alguns modelos devolvem coordenadas em escala 0–1000. Normaliza p/ 0–1.
@@ -606,7 +620,7 @@
 		indicator.style.display = 'flex';
 		try {
 			const { items, usage } = await callGemini(frame, apiKey);
-			lastItems = (Array.isArray(items) ? items : []).filter(it => isMeaningful(it.pt));
+			lastItems = (Array.isArray(items) ? items : []).filter(it => isMeaningful(it.pt) && isJapanese(it));
 			pushHistory(lastItems);
 			showTranslation();
 			setStatus(lastItems.length ? `${lastItems.length} bloco(s) traduzido(s).` : 'Nenhum texto detectado.');
