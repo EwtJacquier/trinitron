@@ -7,7 +7,7 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-	<link rel="stylesheet" href="styles.css?v=1" />
+	<link rel="stylesheet" href="styles.css?v=5" />
 </head>
 
 <body>
@@ -48,6 +48,7 @@
 			<label>Filter:
 				<select id="filter">
 					<option value="original">Original (Passthrough)</option>
+					<option value="revive">Revive (1080p)</option>
 					<option value="downscale">Downscale (480p)</option>
 					<option value="crt">CRT Blend (480p -&gt; 1080p)</option>
 					<option value="crtgrainy">CRT Blend + Grainy (480p -&gt; 1080p)</option>
@@ -169,7 +170,8 @@
 	<div id="translateIndicator" style="display:none;">Traduzindo…</div>
 	<div id="fps">FPS: 0</div>
 
-	<script src="app.js"></script>
+	<script src="app.js?v=4"></script>
+	<script src="debug.js?v=4"></script>
 	<script src="translate.js"></script>
 
 </body>

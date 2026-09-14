@@ -69,12 +69,16 @@ let videoAspect;
 // Object to store loaded shaders
 const filters = {};
 
+// Filtros que usam o video em 1920x1080 direto, sem o downscale de 854x480
+const FULL_RES_FILTERS = ['original', 'revive'];
+function isFullRes(name) { return FULL_RES_FILTERS.includes(name); }
+
 // Vertex shader - vsSource
 let vsSource = null;
 
 // Load shader from file
 async function loadShader(name) {
-	const response = await fetch(`shaders/${name}.glsl`);
+	const response = await fetch(`shaders/${name}.glsl`, { cache: 'no-cache' });
 	return await response.text();
 }
 
@@ -87,7 +91,6 @@ async function loadAllShaders() {
 		'crt',
 		'crtgrainy',
 		'blurrycrt',
-		'blurrycrt2',
 		'blurrygrainycrt',
 		'sharpen',
 		'grainy'
@@ -100,6 +103,9 @@ async function loadAllShaders() {
 			filters[name] = await loadShader(name);
 		}
 	}
+
+	// Revive = passthrough full-res; o saturate/brightness vem do CSS (.revive)
+	filters.revive = filters.original;
 }
 
 function createShader(gl, type, source) {
@@ -115,7 +121,7 @@ function createShader(gl, type, source) {
 }
 
 function createProgram(gl, vsSource, fsSource) {
-	fsSource = filters[filter.value];
+	fsSource = fsSource || filters[filter.value];
 	const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
 	const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
 	const program = gl.createProgram();
@@ -130,15 +136,9 @@ function createProgram(gl, vsSource, fsSource) {
 	return program;
 }
 
-function recompileProgram() {
-	if (!gl) return;
-	if (program) gl.deleteProgram(program);
-
-	program = createProgram(gl, vsSource, null);
-	gl.useProgram(program);
-
-	const positionLocation = gl.getAttribLocation(program, "a_position");
-	const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+function bindQuad(prog) {
+	const positionLocation = gl.getAttribLocation(prog, "a_position");
+	const texCoordLocation = gl.getAttribLocation(prog, "a_texCoord");
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 	gl.enableVertexAttribArray(positionLocation);
@@ -147,8 +147,20 @@ function recompileProgram() {
 	gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
 	gl.enableVertexAttribArray(texCoordLocation);
 	gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+}
 
-	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), filter.value === 'original' ? 1920 : 640.0, filter.value === 'original' ? 1080 : 360.0);
+function recompileProgram() {
+	if (!gl) return;
+	if (program) gl.deleteProgram(program);
+
+	program = createProgram(gl, vsSource, null);
+	gl.useProgram(program);
+	bindQuad(program);
+
+	// Full-res usa o tamanho real do video (720p do console chega como 1280x720, nao 1920x1080)
+	const fullRes = isFullRes(filter.value);
+	const vw = video.videoWidth || 1920, vh = video.videoHeight || 1080;
+	gl.uniform2f(gl.getUniformLocation(program, "u_textureSize"), fullRes ? vw : 640.0, fullRes ? vh : 360.0);
 	gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), canvas.width, canvas.height);
 
 	updatePositionsForAspectRatio();
@@ -316,7 +328,7 @@ function startRenderLoop() {
 
 	ctx.imageSmoothingEnabled = false;
 
-	if ( filter.value === 'original' ) {
+	if ( isFullRes(filter.value) ) {
 		canvas.width = 1920;
 		canvas.height = 1080;
 	} else {
@@ -349,7 +361,7 @@ function startRenderLoop() {
 			const videoWidth = video.videoWidth;
 			const videoHeight = video.videoHeight;
 
-			if ( filter.value === 'original' ) {
+			if ( isFullRes(filter.value) ) {
 				gl.texImage2D(
 					gl.TEXTURE_2D,
 					0,
@@ -360,9 +372,9 @@ function startRenderLoop() {
 				);
 			} else {
 				ctx.drawImage(
-					video,             // vídeo fonte
-					0, 0, 1920, 1080,  // área completa do vídeo
-					0, 0, 854, 480     // área do canvas a desenhar (com escala)
+					video,                          // vídeo fonte
+					0, 0, videoWidth, videoHeight,  // área completa do vídeo (1080p ou 720p)
+					0, 0, 854, 480                  // área do canvas a desenhar (com escala)
 				);
 
 				gl.texImage2D(
@@ -403,9 +415,9 @@ sidebarToggle.addEventListener('click', () => {
 });
 
 filter.addEventListener('change', () => {
-	['original', 'downscale', 'crt', 'crtgrainy', 'blurrycrt', 'blurrycrt2', 'blurrygrainycrt', 'sharpen', 'grainy'].forEach(c => container.classList.remove(c));
+	['original', 'revive', 'downscale', 'crt', 'crtgrainy', 'blurrycrt', 'blurrygrainycrt', 'sharpen', 'grainy'].forEach(c => container.classList.remove(c));
 	container.classList.add(filter.value);
-	if (filter.value === 'original') {
+	if (isFullRes(filter.value)) {
 		canvas.width = 1920;
 		canvas.height = 1080;
 	} else {

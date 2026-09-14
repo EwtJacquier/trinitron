@@ -7,7 +7,20 @@ Two front-ends share the same shaders:
 - **`native.py`** — Linux desktop app (PyQt5 + wgpu/Vulkan + V4L2), which can
   capture either a webcam/capture card or a game window.
 
-## Running
+## Running in the browser
+
+`index.html` must be served over HTTP (opening it via `file://` fails because
+`app.js` fetches the shaders from `shaders/`). No HTTPS needed: browsers treat
+`http://localhost` as a secure context, so camera, microphone and screen
+capture all work.
+
+```bash
+python -m http.server 8000
+```
+
+Then open <http://localhost:8000>.
+
+## Running (native, Linux)
 
 ```bash
 python3 native.py
