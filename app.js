@@ -70,7 +70,7 @@ let videoAspect;
 const filters = {};
 
 // Filtros que usam o video em 1920x1080 direto, sem o downscale de 854x480
-const FULL_RES_FILTERS = ['original', 'revive'];
+const FULL_RES_FILTERS = ['original', 'revive', 'reviveaa'];
 function isFullRes(name) { return FULL_RES_FILTERS.includes(name); }
 
 // Vertex shader - vsSource
@@ -93,7 +93,8 @@ async function loadAllShaders() {
 		'blurrycrt',
 		'blurrygrainycrt',
 		'sharpen',
-		'grainy'
+		'grainy',
+		'fxaa'
 	];
 
 	for (const name of shaderNames) {
@@ -104,8 +105,9 @@ async function loadAllShaders() {
 		}
 	}
 
-	// Revive = passthrough full-res; o saturate/brightness vem do CSS (.revive)
+	// Revive = passthrough full-res; o saturate/brightness vem do CSS (.revive / .reviveaa)
 	filters.revive = filters.original;
+	filters.reviveaa = filters.fxaa;
 }
 
 function createShader(gl, type, source) {
@@ -415,7 +417,7 @@ sidebarToggle.addEventListener('click', () => {
 });
 
 filter.addEventListener('change', () => {
-	['original', 'revive', 'downscale', 'crt', 'crtgrainy', 'blurrycrt', 'blurrygrainycrt', 'sharpen', 'grainy'].forEach(c => container.classList.remove(c));
+	['original', 'revive', 'reviveaa', 'downscale', 'crt', 'crtgrainy', 'blurrycrt', 'blurrygrainycrt', 'sharpen', 'grainy'].forEach(c => container.classList.remove(c));
 	container.classList.add(filter.value);
 	if (isFullRes(filter.value)) {
 		canvas.width = 1920;

@@ -26,9 +26,11 @@ body {
 	filter: saturate(1.2);
 }
 
-.revive #canvas {
+.revive #canvas, .reviveaa #canvas {
 	filter: brightness(1.1) saturate(1.3);
 }
+
+/* .reviveaa fica sem pixelated: o upscale bilinear do browser preserva a suavizacao do FXAA */
 
 .sharpen #canvas,
 .grainy #canvas,
